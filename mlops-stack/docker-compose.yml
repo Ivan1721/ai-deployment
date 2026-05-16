@@ -1,0 +1,95 @@
+networks:
+  mlops-net:
+    driver: bridge
+
+volumes:
+  mlflow-data:
+
+services:
+
+  mlflow:
+    build: ./mlflow
+    container_name: mlflow-server
+    ports:
+      - "5001:5001"
+    volumes:
+      - mlflow-data:/mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5001/"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+    networks:
+      - mlops-net
+
+  model-trainer:
+    build: ./model-trainer
+    container_name: model-trainer
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      MLFLOW_ARTIFACT_ROOT: /mlflow/artifacts
+    volumes:
+      - mlflow-data:/mlflow
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    networks:
+      - mlops-net
+
+  inference-api:
+    build: ./inference-api
+    container_name: inference-api
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      MODEL_NAME: iris-classifier
+      MODEL_STAGE: Production
+    volumes:
+      - mlflow-data:/mlflow
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    # Health check permisivo: la API puede estar "degraded" (sin modelo aún)
+    # y seguir siendo válida como contenedor corriendo
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks:
+      - mlops-net
+
+  drift-detector:
+    build: ./drift-detector
+    container_name: drift-detector
+    environment:
+      MLFLOW_TRACKING_URI:       http://mlflow:5001
+      INFERENCE_API_URL:         http://inference-api:8000
+      MODEL_NAME:                iris-classifier
+      KS_P_VALUE_THRESHOLD:      "0.05"
+      CHI2_P_VALUE_THRESHOLD:    "0.05"
+      CONSECUTIVE_DRIFT_WINDOWS: "2"
+      WINDOW_SIZE:               "30"
+      CHECK_INTERVAL_S:          "30"
+    volumes:
+      - mlflow-data:/mlflow
+    # Solo depende de MLFlow — espera a la API por su cuenta en el código
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    networks:
+      - mlops-net
+
+  nginx:
+    build: ./nginx
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+    depends_on:
+      - mlflow
+      - inference-api
+    networks:
+      - mlops-net

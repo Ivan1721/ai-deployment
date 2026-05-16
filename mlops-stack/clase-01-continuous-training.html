@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clase 01 — Continuous Training: Reentrenamiento automático ante drift</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --card: #20232f;
+    --border: #2e3347; --accent: #6c8fff; --accent2: #4ecdc4;
+    --warn: #ffd93d; --danger: #ff6b6b; --success: #a8e6cf;
+    --text: #e8eaf0; --muted: #8891a8; --code-bg: #141720;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+
+  /* ── Layout ── */
+  .sidebar { position: fixed; top: 0; left: 0; width: 260px; height: 100vh; background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; overflow-y: auto; z-index: 100; }
+  .main { margin-left: 260px; padding: 48px; max-width: 900px; }
+  @media(max-width:900px){ .sidebar{display:none} .main{margin-left:0;padding:24px} }
+
+  /* ── Sidebar ── */
+  .sidebar-title { padding: 0 20px 16px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .nav-item { display: block; padding: 8px 20px; font-size: 0.85rem; color: var(--muted); text-decoration: none; transition: all 0.15s; border-left: 2px solid transparent; }
+  .nav-item:hover, .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(108,143,255,0.06); }
+  .nav-section { padding: 12px 20px 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--border); margin-top: 8px; }
+
+  /* ── Typography ── */
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin: 48px 0 16px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--accent); }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 28px 0 10px; }
+  h4 { font-size: 0.9rem; font-weight: 600; margin: 20px 0 8px; color: var(--accent2); }
+  p  { margin-bottom: 14px; font-size: 0.93rem; }
+  ul, ol { margin: 0 0 14px 20px; font-size: 0.93rem; }
+  li { margin-bottom: 5px; }
+  strong { color: var(--text); }
+  a { color: var(--accent); }
+
+  /* ── Header ── */
+  .page-header { margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .breadcrumb { font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; }
+  .meta-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+  .meta-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; border: 1px solid var(--border); color: var(--muted); }
+  .meta-badge.blue { border-color: rgba(108,143,255,0.4); color: var(--accent); background: rgba(108,143,255,0.08); }
+  .meta-badge.green { border-color: rgba(168,230,207,0.4); color: var(--success); background: rgba(168,230,207,0.08); }
+  .meta-badge.yellow { border-color: rgba(255,217,61,0.4); color: var(--warn); background: rgba(255,217,61,0.08); }
+
+  /* ── Callout boxes ── */
+  .callout { padding: 16px 20px; border-radius: 8px; margin: 20px 0; font-size: 0.88rem; border-left: 3px solid; }
+  .callout-info    { background: rgba(108,143,255,0.07); border-color: var(--accent); }
+  .callout-warn    { background: rgba(255,217,61,0.07);  border-color: var(--warn); }
+  .callout-danger  { background: rgba(255,107,107,0.07); border-color: var(--danger); }
+  .callout-success { background: rgba(168,230,207,0.07); border-color: var(--success); }
+  .callout-title   { font-weight: 700; margin-bottom: 6px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .callout-info    .callout-title { color: var(--accent); }
+  .callout-warn    .callout-title { color: var(--warn); }
+  .callout-danger  .callout-title { color: var(--danger); }
+  .callout-success .callout-title { color: var(--success); }
+
+  /* ── Code ── */
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px; overflow-x: auto; margin: 16px 0; position: relative; }
+  code { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.83rem; }
+  p code, li code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.82rem; border: 1px solid var(--border); }
+  .code-label { position: absolute; top: 8px; right: 12px; font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── Diagram ── */
+  .diagram { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 28px 20px; margin: 20px 0; font-family: monospace; font-size: 0.8rem; line-height: 1.8; color: var(--muted); }
+  .diagram .hl { color: var(--accent2); }
+  .diagram .hlw { color: var(--warn); }
+  .diagram .hlg { color: var(--success); }
+  .diagram .hlr { color: var(--danger); }
+
+  /* ── Concept cards ── */
+  .concept-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  @media(max-width:700px){ .concept-grid{grid-template-columns:1fr} }
+  .concept-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; }
+  .concept-card h4 { margin-top: 0; }
+  .concept-card p  { font-size: 0.84rem; color: var(--muted); margin: 0; }
+
+  /* ── Steps ── */
+  .steps { counter-reset: step; margin: 20px 0; }
+  .step  { display: flex; gap: 16px; margin-bottom: 20px; }
+  .step-num { counter-increment: step; display: flex; align-items: flex-start; padding-top: 2px; }
+  .step-num::before { content: counter(step); width: 28px; height: 28px; border-radius: 50%; background: rgba(108,143,255,0.15); border: 1px solid var(--accent); color: var(--accent); font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-body h4 { margin-top: 0; }
+  .step-body p  { font-size: 0.88rem; color: var(--muted); margin: 0; }
+
+  /* ── Exercise ── */
+  .exercise { border: 1px solid var(--warn); border-radius: 8px; padding: 20px; margin: 24px 0; background: rgba(255,217,61,0.04); }
+  .exercise-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .exercise-num { background: var(--warn); color: #1a1a1a; font-weight: 700; font-size: 0.75rem; padding: 2px 10px; border-radius: 20px; }
+  .exercise h4 { margin: 0; color: var(--warn); }
+  .exercise ol { margin-top: 10px; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.85rem; }
+  th { background: var(--card); padding: 10px 14px; text-align: left; color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid rgba(46,51,71,0.5); color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  td strong { color: var(--text); }
+
+  /* ── Progress bar ── */
+  .progress-bar { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
+  .progress-label { font-size: 0.82rem; color: var(--muted); margin-bottom: 8px; }
+  .progress-track { background: var(--border); border-radius: 4px; height: 8px; }
+  .progress-fill  { background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; height: 8px; }
+
+  /* ── Section anchor ── */
+  section { scroll-margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar navegación -->
+<nav class="sidebar">
+  <div class="sidebar-title">Clase 01 · MLOps</div>
+  <div class="nav-section">Teoría</div>
+  <a class="nav-item" href="#objetivos">Objetivos</a>
+  <a class="nav-item" href="#contexto">Contexto y motivación</a>
+  <a class="nav-item" href="#tipos-drift">Tipos de drift</a>
+  <a class="nav-item" href="#tests">Tests estadísticos</a>
+  <div class="nav-section">Arquitectura</div>
+  <a class="nav-item" href="#arquitectura">Diagrama del sistema</a>
+  <a class="nav-item" href="#componentes">Nuevos componentes</a>
+  <div class="nav-section">Implementación</div>
+  <a class="nav-item" href="#detector">detector.py</a>
+  <a class="nav-item" href="#trigger">retrain_trigger.py</a>
+  <a class="nav-item" href="#compose">docker-compose</a>
+  <div class="nav-section">Práctica</div>
+  <a class="nav-item" href="#ejercicios">Ejercicios</a>
+  <a class="nav-item" href="#discusion">Discusión</a>
+  <a class="nav-item" href="#referencias">Referencias</a>
+</nav>
+
+<main class="main">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="breadcrumb">MLOps Stack · Tutorial Base → Clase 01</div>
+    <h1>Continuous Training</h1>
+    <p style="color:var(--muted);font-size:1rem;margin:0">Reentrenamiento automático ante drift de datos y concepto</p>
+    <div class="meta-row">
+      <span class="meta-badge blue">Pipeline & Automatización</span>
+      <span class="meta-badge yellow">Intermedio · 3–4 h</span>
+      <span class="meta-badge green">Nuevo servicio: drift-detector</span>
+    </div>
+  </div>
+
+  <!-- ── OBJETIVOS ── -->
+  <section id="objetivos">
+    <h2>Objetivos de aprendizaje</h2>
+    <p>Al finalizar esta clase el estudiante será capaz de:</p>
+    <ul>
+      <li>Explicar qué es data drift y concept drift, y por qué invalidan modelos en producción.</li>
+      <li>Aplicar los tests KS y Chi-cuadrado para detectar drift de forma estadísticamente rigurosa.</li>
+      <li>Diseñar e implementar un servicio de monitoreo continuo integrado al stack MLOps.</li>
+      <li>Automatizar el ciclo <strong>Champion/Challenger</strong>: detectar degradación → reentrenar → comparar → promover.</li>
+      <li>Ejecutar un swap de modelo en producción <strong>sin downtime</strong> usando el endpoint <code>/reload</code>.</li>
+      <li>Registrar métricas de monitoreo en MLFlow para trazabilidad completa del ciclo de vida.</li>
+    </ul>
+
+    <div class="progress-bar">
+      <div class="progress-label">Progresión del tutorial — esta clase añade el componente de monitoreo</div>
+      <div class="progress-track"><div class="progress-fill" style="width:45%"></div></div>
+    </div>
+  </section>
+
+  <!-- ── CONTEXTO ── -->
+  <section id="contexto">
+    <h2>Contexto y motivación</h2>
+
+    <p>El tutorial base construyó un pipeline MLOps funcional: MLFlow registra el modelo, se promueve a <em>Production</em>, y la Inference API lo sirve. Pero ese pipeline asume que el mundo permanece estático. En la práctica, <strong>los datos de producción cambian con el tiempo</strong>.</p>
+
+    <div class="callout callout-info">
+      <div class="callout-title">Fundamento teórico · Eken et al. (2025)</div>
+      <p>"Training can be triggered when new data is available <strong>or the model performance is reduced or a concept drift is detected</strong>." (PS140, PS102, PS147)</p>
+      <p style="margin:0;margin-top:8px">"When a change, bias, or drift is captured through monitoring, it often results in adjusting the dataset for model training and/or model optimization." (PS190)</p>
+    </div>
+
+    <p>El Continuous Training (CT) es la extensión natural de CI/CD al dominio ML. Mientras en software tradicional el código fuente es el artefacto que puede degradar, en ML <strong>los datos son los que degradan el modelo</strong>.</p>
+
+    <div class="concept-grid">
+      <div class="concept-card">
+        <h4>🏭 Sin CT (tutorial base)</h4>
+        <p>El modelo se entrena una vez. Se degrada silenciosamente con el tiempo. El equipo se entera cuando el negocio reporta predicciones erróneas.</p>
+      </div>
+      <div class="concept-card">
+        <h4>🔄 Con CT (esta clase)</h4>
+        <p>Un detector monitorea continuamente la distribución de los datos entrantes. Si detecta cambio significativo, dispara reentrenamiento automático.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TIPOS DE DRIFT ── -->
+  <section id="tipos-drift">
+    <h2>Tipos de drift</h2>
+
+    <div class="concept-grid">
+      <div class="concept-card">
+        <h4>📊 Data Drift (covariante)</h4>
+        <p>La distribución de los features de entrada <strong>P(X)</strong> cambia respecto al entrenamiento. El modelo no fue entrenado con datos de esta forma.</p>
+        <p style="margin-top:8px"><em>Ejemplo:</em> Una cámara de sensor envejece y los valores de píxel se desplazan sistemáticamente hacia valores más altos.</p>
+      </div>
+      <div class="concept-card">
+        <h4>🧠 Concept Drift</h4>
+        <p>La relación entre features y etiqueta <strong>P(Y|X)</strong> cambia. El mismo input ahora debería producir un output diferente.</p>
+        <p style="margin-top:8px"><em>Ejemplo:</em> Un modelo de detección de fraude entrenado antes de la pandemia; los patrones de compra cambiaron radicalmente.</p>
+      </div>
+      <div class="concept-card">
+        <h4>📉 Performance Drift</h4>
+        <p>Las métricas de negocio (accuracy, recall) caen por debajo de un umbral. Puede ser consecuencia de los dos anteriores.</p>
+        <p style="margin-top:8px"><em>Detectado via:</em> ground truth con lag (se necesita feedback del mundo real).</p>
+      </div>
+      <div class="concept-card">
+        <h4>📦 Upstream Drift</h4>
+        <p>El pipeline de datos upstream cambió: un schema, un sistema fuente, una lógica de transformación. El modelo recibe datos técnicamente diferentes.</p>
+        <p style="margin-top:8px"><em>Detectado via:</em> validación de schema + monitoreo de pipelines.</p>
+      </div>
+    </div>
+
+    <div class="callout callout-warn">
+      <div class="callout-title">⚠ Esta clase implementa</div>
+      <p><strong>Data drift</strong> (KS test sobre distribución de features) y <strong>Concept drift</strong> (Chi-cuadrado sobre distribución de predicciones). El performance drift requiere ground truth con lag, que generalmente no está disponible en tiempo real.</p>
+    </div>
+  </section>
+
+  <!-- ── TESTS ESTADÍSTICOS ── -->
+  <section id="tests">
+    <h2>Tests estadísticos</h2>
+
+    <h3>Kolmogorov-Smirnov (KS) test — Data drift</h3>
+    <p>Compara dos distribuciones empíricas para determinar si provienen de la misma distribución subyacente. Es <strong>no-paramétrico</strong>: no asume normalidad.</p>
+
+    <table>
+      <tr><th>H₀</th><td>Las muestras de producción y referencia provienen de la misma distribución continua</td></tr>
+      <tr><th>Estadístico</th><td><strong>D = sup|F₁(x) − F₂(x)|</strong> — máxima diferencia entre las funciones de distribución acumuladas</td></tr>
+      <tr><th>Decisión</th><td>Si <strong>p-value &lt; α</strong> (default 0.05) → rechazar H₀ → <strong>drift detectado</strong></td></tr>
+      <tr><th>Ventaja</th><td>Sensible a diferencias en media, varianza Y forma de distribución</td></tr>
+      <tr><th>Limitación</th><td>Requiere suficientes muestras (mínimo ~20–30 por ventana)</td></tr>
+    </table>
+
+    <pre><code class="language-python"><span class="code-label">Python</span>from scipy import stats
+
+# ref_data  = distribución del dataset de entrenamiento (referencia)
+# prod_data = ventana de datos recientes de producción
+
+ks_stat, p_value = stats.ks_2samp(ref_data, prod_data)
+
+if p_value < 0.05:
+    print(f"DRIFT en feature '{feat}': KS={ks_stat:.4f}, p={p_value:.4f}")</code></pre>
+
+    <h3>Chi-cuadrado (χ²) — Concept drift</h3>
+    <p>Evalúa si la distribución observada de predicciones difiere significativamente de la esperada según el balance de clases del entrenamiento.</p>
+
+    <table>
+      <tr><th>H₀</th><td>La distribución de predicciones en producción es consistente con la del entrenamiento</td></tr>
+      <tr><th>Estadístico</th><td><strong>χ² = Σ (Oᵢ − Eᵢ)² / Eᵢ</strong></td></tr>
+      <tr><th>Decisión</th><td>Si <strong>p-value &lt; α</strong> → el modelo "prefiere" ciertas clases → <strong>concept drift</strong></td></tr>
+      <tr><th>Interpretación</th><td>Si el modelo predice siempre clase 2, algo cambió en el espacio de entrada</td></tr>
+    </table>
+
+    <pre><code class="language-python"><span class="code-label">Python</span>from scipy import stats
+import numpy as np
+
+# observed          = conteo de predicciones por clase en la ventana
+# expected_dist     = proporción de clases en el set de entrenamiento
+
+observed = np.bincount(predictions, minlength=3).astype(float)
+expected = expected_dist * len(predictions)
+
+chi2_stat, p_value = stats.chisquare(observed, f_exp=expected)
+
+if p_value < 0.05:
+    print(f"CONCEPT DRIFT: χ²={chi2_stat:.4f}, p={p_value:.4f}")</code></pre>
+  </section>
+
+  <!-- ── ARQUITECTURA ── -->
+  <section id="arquitectura">
+    <h2>Arquitectura del sistema extendido</h2>
+
+    <div class="diagram">
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Docker Network: mlops-net                     │
+│                                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │               mlflow-data  (volumen compartido)              │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│          ↑              ↑               ↑              ↑           │
+│  ┌───────────┐  ┌───────────────┐  ┌──────────┐  ┌──────────────┐ │
+│  │  <span class="hl">MLFlow</span>     │  │ <span class="hlw">model-trainer</span>  │  │ <span class="hlg">inference</span> │  │ <span class="hlr">drift</span>        │ │
+│  │  :5001    │  │ (job one-shot)│  │ <span class="hlg">api :8000</span> │  │ <span class="hlr">detector</span>     │ │
+│  │           │  │               │  │          │  │              │ │
+│  │  Tracking │◀─│ train + log   │  │ /predict │◀─│ ingest prod  │ │
+│  │  Registry │  │ register      │  │ /reload  │  │ samples      │ │
+│  │  Artifacts│  │ promote       │  └──────────┘  │              │ │
+│  └───────────┘  └───────────────┘       ↑        │ KS test      │ │
+│        ↑               ↑                │        │ Chi² test    │ │
+│        │         promoted if            │        │              │ │
+│        │         challenger wins        │        │ drift? →     │ │
+│        └────────────────────────────────┘        │ trigger      │ │
+│                                                   │ retrain      │ │
+│                                                   └──────────────┘ │
+│                                                          │         │
+│    <span class="hlw">Drift detected × 2 consecutive windows</span>                   │         │
+│    → run inline trainer                                  │         │
+│    → compare champion vs challenger accuracy    ─────────┘         │
+│    → promote if challenger wins                                     │
+│    → POST /reload (zero downtime swap)                              │
+└─────────────────────────────────────────────────────────────────────┘</div>
+
+    <p>El flujo completo de Continuous Training:</p>
+    <div class="steps">
+      <div class="step"><div class="step-num"></div><div class="step-body"><h4>Ingesta de producción</h4><p>El detector ingesta muestras de los datos que llegan a producción (en este tutorial: simuladas con drift progresivo).</p></div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><h4>Tests estadísticos por ventana</h4><p>Cada N segundos: KS test sobre cada feature + Chi-cuadrado sobre distribución de predicciones.</p></div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><h4>Acumulación de evidencia</h4><p>Solo se dispara el reentrenamiento si drift aparece en K ventanas consecutivas, evitando falsos positivos.</p></div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><h4>Reentrenamiento automático</h4><p>El trainer genera un Challenger y lo registra en el Model Registry de MLFlow.</p></div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><h4>Evaluación Champion/Challenger</h4><p>Se comparan las métricas de ambas versiones. Se promueve el Challenger solo si supera al Champion.</p></div></div>
+      <div class="step"><div class="step-num"></div><div class="step-body"><h4>Zero-downtime swap</h4><p><code>POST /reload</code> hace que la Inference API cargue la nueva versión sin reiniciar el contenedor.</p></div></div>
+    </div>
+  </section>
+
+  <!-- ── COMPONENTES ── -->
+  <section id="componentes">
+    <h2>Nuevos componentes</h2>
+    <table>
+      <tr>
+        <th>Archivo</th><th>Responsabilidad</th>
+      </tr>
+      <tr><td><code>drift-detector/detector.py</code></td><td><strong>Motor de detección</strong> — loop de monitoreo, tests KS + Chi², registro en MLFlow, coordina el trigger</td></tr>
+      <tr><td><code>drift-detector/retrain_trigger.py</code></td><td><strong>Lógica Champion/Challenger</strong> — ejecuta el reentrenamiento, compara versiones, promueve, recarga la API</td></tr>
+      <tr><td><code>drift-detector/Dockerfile</code></td><td>Imagen con scipy, mlflow, httpx y schedule</td></tr>
+      <tr><td><code>docker-compose.yml</code></td><td>Nuevo servicio <code>drift-detector</code> con variables de entorno configurables</td></tr>
+    </table>
+  </section>
+
+  <!-- ── DETECTOR.PY ── -->
+  <section id="detector">
+    <h2>Código: detector.py</h2>
+
+    <h3>Clase ProductionBuffer</h3>
+    <p>Simula el flujo de datos de producción. Los primeros 2 ciclos (pasos 0–2) generan datos similares al entrenamiento. A partir del paso 3, introduce drift progresivo en <code>petal length</code> y <code>petal width</code> y sesga las predicciones hacia clase 2.</p>
+
+    <div class="callout callout-info">
+      <div class="callout-title">Diseño pedagógico</div>
+      <p>La simulación de drift progresivo permite observar en tiempo real cómo el sistema pasa de estado "OK" a "DRIFT detectado" a "REENTRENAMIENTO DISPARADO". En producción, este buffer se reemplaza por la lectura del log de predicciones reales.</p>
+    </div>
+
+    <h3>Clase DriftDetector</h3>
+    <p>Implementa los dos tests estadísticos y mantiene el contador de ventanas consecutivas:</p>
+    <pre><code><span class="code-label">detector.py · fragmento</span>def evaluate(self, window_df, predictions) -> dict:
+    data_drift    = self.test_data_drift(window_df)    # KS por feature
+    concept_drift = self.test_concept_drift(predictions)  # Chi-cuadrado
+
+    any_drift = data_drift["any_feature_drifted"] or concept_drift["drifted"]
+
+    if any_drift:
+        self.consecutive_drifts += 1
+    else:
+        self.consecutive_drifts = 0   # ← reset si hay ventana limpia
+
+    should_retrain = (self.consecutive_drifts >= CONSECUTIVE_DRIFT_WINDOWS)
+    ...</code></pre>
+
+    <p>El reset del contador ante una ventana sin drift implementa una política conservadora: se requieren <strong>ventanas consecutivas</strong>, no acumuladas, para evitar falsos positivos.</p>
+
+    <h3>Variables de entorno configurables</h3>
+    <table>
+      <tr><th>Variable</th><th>Default</th><th>Descripción</th></tr>
+      <tr><td><code>KS_P_VALUE_THRESHOLD</code></td><td><code>0.05</code></td><td>p-value KS bajo el cual se considera data drift</td></tr>
+      <tr><td><code>CHI2_P_VALUE_THRESHOLD</code></td><td><code>0.05</code></td><td>p-value Chi² para concept drift</td></tr>
+      <tr><td><code>CONSECUTIVE_DRIFT_WINDOWS</code></td><td><code>2</code></td><td>Ventanas consecutivas antes de reentrenar</td></tr>
+      <tr><td><code>WINDOW_SIZE</code></td><td><code>30</code></td><td>Muestras por ventana de evaluación</td></tr>
+      <tr><td><code>CHECK_INTERVAL_S</code></td><td><code>30</code></td><td>Segundos entre ciclos de detección</td></tr>
+    </table>
+  </section>
+
+  <!-- ── TRIGGER ── -->
+  <section id="trigger">
+    <h2>Código: retrain_trigger.py</h2>
+
+    <h3>Ciclo Champion/Challenger</h3>
+    <p>Este patrón, recomendado por Azure ML best practices (PS153 en Eken et al.), define que el modelo en producción es el <strong>Champion</strong>. Cada reentrenamiento produce un <strong>Challenger</strong> que compite contra él.</p>
+
+    <pre><code><span class="code-label">retrain_trigger.py · fragmento</span>def trigger(reason, consecutive_windows, mlflow_uri):
+    # 1. Registrar el evento de reentrenamiento en MLFlow
+    with mlflow.start_run(run_name=f"retrain-event-{reason}"):
+        mlflow.log_params({"trigger_reason": reason, ...})
+        mlflow.set_tag("event_type", "retrain_trigger")
+
+    # 2. Obtener accuracy del Champion actual
+    champion_acc = _get_champion_accuracy(client)
+
+    # 3. Ejecutar el trainer (genera Challenger)
+    _run_inline_trainer(mlflow_uri)
+
+    # 4. Comparar versiones
+    challenger_version, challenger_acc = _get_challenger_accuracy(client)
+
+    # 5. Decisión: ¿promover o archivar?
+    if challenger_acc >= champion_acc + ACCURACY_DELTA:
+        client.transition_model_version_stage(
+            name=MODEL_NAME, version=challenger_version, stage="Production",
+            archive_existing_versions=True
+        )
+        _reload_inference_api()   # ← zero-downtime swap
+    else:
+        client.transition_model_version_stage(
+            name=MODEL_NAME, version=challenger_version, stage="Archived"
+        )</code></pre>
+
+    <div class="callout callout-success">
+      <div class="callout-title">Zero-downtime swap</div>
+      <p>El endpoint <code>POST /reload</code> de la Inference API carga el nuevo modelo desde el Registry sin reiniciar el contenedor. Mientras el nuevo modelo carga, el anterior sigue sirviendo predicciones. Es el mecanismo que habilita el CT sin interrupciones de servicio.</p>
+    </div>
+  </section>
+
+  <!-- ── DOCKER-COMPOSE ── -->
+  <section id="compose">
+    <h2>Configuración docker-compose</h2>
+    <p>El nuevo servicio <code>drift-detector</code> se agrega al stack existente. Comparte el volumen <code>mlflow-data</code> para acceder directamente a los artefactos.</p>
+
+    <pre><code><span class="code-label">docker-compose.yml · nuevo servicio</span>drift-detector:
+    build: ./drift-detector
+    container_name: drift-detector
+    environment:
+      MLFLOW_TRACKING_URI:       http://mlflow:5001
+      INFERENCE_API_URL:         http://inference-api:8000
+      KS_P_VALUE_THRESHOLD:      "0.05"
+      CHI2_P_VALUE_THRESHOLD:    "0.05"
+      CONSECUTIVE_DRIFT_WINDOWS: "2"
+      WINDOW_SIZE:               "30"
+      CHECK_INTERVAL_S:          "30"
+    volumes:
+      - mlflow-data:/mlflow
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      inference-api:
+        condition: service_healthy</code></pre>
+
+    <h3>Para ejecutar</h3>
+    <pre><code><span class="code-label">Terminal</span># Primera vez
+bash start.sh
+
+# Si el stack ya está corriendo, solo agregar el detector
+docker compose up -d drift-detector
+
+# Ver logs del detector en tiempo real
+docker compose logs -f drift-detector
+
+# Ver métricas de drift en MLFlow
+# → http://localhost:5001
+# → Experiment: "iris-drift-monitoring"</code></pre>
+  </section>
+
+  <!-- ── EJERCICIOS ── -->
+  <section id="ejercicios">
+    <h2>Ejercicios</h2>
+
+    <div class="exercise">
+      <div class="exercise-header">
+        <span class="exercise-num">Ejercicio 1</span>
+        <h4>Observar el ciclo completo de CT</h4>
+      </div>
+      <p>Levanta el stack y observa el comportamiento del detector en los logs.</p>
+      <ol>
+        <li>Ejecuta <code>docker compose logs -f drift-detector</code></li>
+        <li>Observa los pasos 0, 1, 2 (sin drift) — los tests deben reportar <code>✓ OK</code></li>
+        <li>En el paso 3, el drift comienza — observa cómo cambian los p-values de KS</li>
+        <li>En el paso 4 (segunda ventana con drift), observa el mensaje <code>🔁 RETRAINING TRIGGERED</code></li>
+        <li>Abre MLFlow UI (<code>http://localhost:5001</code>) y verifica los experimentos:<ul>
+          <li><code>iris-drift-monitoring</code> — métricas de detección por ventana</li>
+          <li><code>iris-retraining-events</code> — registros de triggers y promociones</li>
+          <li><code>iris-production</code> — el nuevo run de entrenamiento con tag <code>triggered_by=drift_detector</code></li>
+        </ul></li>
+      </ol>
+    </div>
+
+    <div class="exercise">
+      <div class="exercise-header">
+        <span class="exercise-num">Ejercicio 2</span>
+        <h4>Ajustar sensibilidad del detector</h4>
+      </div>
+      <p>Modifica los parámetros en <code>docker-compose.yml</code> y observa el efecto:</p>
+      <ol>
+        <li>Cambia <code>KS_P_VALUE_THRESHOLD</code> a <code>0.10</code> — ¿detecta drift antes o después?</li>
+        <li>Cambia <code>CONSECUTIVE_DRIFT_WINDOWS</code> a <code>3</code> — ¿cuánto tarda más en disparar el reentrenamiento?</li>
+        <li>Reduce <code>WINDOW_SIZE</code> a <code>15</code> — ¿qué efecto tiene en la sensibilidad del test KS?</li>
+        <li>Discute: ¿cuál es el trade-off entre sensibilidad (detectar drift rápido) y especificidad (evitar falsos positivos)?</li>
+      </ol>
+    </div>
+
+    <div class="exercise">
+      <div class="exercise-header">
+        <span class="exercise-num">Ejercicio 3 · Avanzado</span>
+        <h4>Implementar drift real desde predicciones de la API</h4>
+      </div>
+      <p>En lugar de datos simulados, modifica el <code>ProductionBuffer</code> para leer las predicciones reales:</p>
+      <ol>
+        <li>Agrega un endpoint <code>GET /predictions/log</code> a <code>app.py</code> que retorne las últimas N predicciones con sus inputs</li>
+        <li>Modifica <code>ProductionBuffer.ingest_production_sample()</code> para llamar a ese endpoint via <code>httpx</code></li>
+        <li>Verifica que el detector funciona con datos reales haciendo llamadas con features desplazadas:<br>
+          <code>curl -X POST http://localhost:8000/predict -d '{"instances": [[7.5, 4.0, 6.5, 2.5]]}'</code>
+        </li>
+        <li>Observa si el KS test detecta el shift en la distribución de petal length</li>
+      </ol>
+    </div>
+
+    <div class="exercise">
+      <div class="exercise-header">
+        <span class="exercise-num">Ejercicio 4 · Investigación</span>
+        <h4>Comparar métodos de detección de drift</h4>
+      </div>
+      <p>El KS test es uno de varios detectores posibles. Investiga e implementa una alternativa:</p>
+      <ol>
+        <li>Reemplaza el KS test por el test de <strong>Population Stability Index (PSI)</strong> para data drift</li>
+        <li>Implementa el algoritmo <strong>ADWIN</strong> (Adaptive Windowing) del paquete <code>river</code> para detección online</li>
+        <li>Compara ambos métodos en términos de: velocidad de detección, tasa de falsos positivos, costo computacional</li>
+        <li>Registra los resultados comparativos como métricas en MLFlow en un experimento dedicado</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ── DISCUSIÓN ── -->
+  <section id="discusion">
+    <h2>Preguntas de discusión</h2>
+    <ol>
+      <li><strong>¿Cuándo NO conviene automatizar el reentrenamiento?</strong> Eken et al. (2025) identifica la "Automation Decision Dilemma" como un desafío real. ¿Qué actividades requieren supervisión humana en el ciclo CT?</li>
+      <li><strong>El detector usa distribución de <em>predicciones</em> para concept drift</strong>, no ground truth. ¿Qué limitaciones tiene este enfoque? ¿Cuándo puede producir falsos positivos?</li>
+      <li><strong>¿Qué ocurre si el Challenger nunca supera al Champion?</strong> Diseña una política para este escenario — ¿cuántos intentos fallidos antes de escalar a intervención humana?</li>
+      <li><strong>El reentrenamiento usa el mismo dataset Iris.</strong> En un sistema real, ¿de dónde vendrían los nuevos datos de entrenamiento? Discute el rol del feedback loop de producción.</li>
+    </ol>
+  </section>
+
+  <!-- ── REFERENCIAS ── -->
+  <section id="referencias">
+    <h2>Referencias</h2>
+    <ul>
+      <li>Eken, B. et al. (2025). <em>A Multivocal Review of MLOps Practices, Challenges and Open Issues</em>. ACM Computing Surveys, 58(2). — Sección 3.2.5 (Monitoring), 5.2.4 (Continual Learning)</li>
+      <li>PS140, PS102, PS147 en Eken et al. — fundamento de los triggers event-driven de reentrenamiento</li>
+      <li>PS153 (Azure ML Best Practices) — patrón Champion/Challenger</li>
+      <li>Kolmogorov, A. N. (1933). Sulla determinazione empirica di una legge di distribuzione. <em>Giornale dell'Istituto Italiano degli Attuari</em></li>
+      <li>Gama, J. et al. (2014). A survey on concept drift adaptation. <em>ACM Computing Surveys</em>, 46(4)</li>
+    </ul>
+  </section>
+
+</main>
+
+<script>
+  // Highlight active nav item on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navItems = document.querySelectorAll('.nav-item');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navItems.forEach(n => n.classList.remove('active'));
+        const active = document.querySelector(`.nav-item[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.3 });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
