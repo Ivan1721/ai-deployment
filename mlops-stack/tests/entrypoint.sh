@@ -2,24 +2,33 @@
 set -e
 
 echo "=== Test Runner Entrypoint ==="
+echo "Python: $(python --version)"
 
-# Detectar IP del gateway (host Docker) en Linux
-GATEWAY=$(ip route | awk '/default/ {print $3; exit}')
-echo "Docker gateway IP: $GATEWAY"
+# Detectar IP del gateway Docker
+GATEWAY=$(ip route 2>/dev/null | awk '/default/ {print $3; exit}')
+echo "Gateway: ${GATEWAY:-not found}"
 
-# Si las URLs aún apuntan a nombres DNS que no resuelven, reemplazar con IP
-if [ -z "$MLFLOW_TRACKING_URI" ] || echo "$MLFLOW_TRACKING_URI" | grep -q "mlflow\|inference-api\|host.docker.internal"; then
+# Sobreescribir URLs con la IP del gateway si contienen nombres DNS internos
+if echo "${MLFLOW_TRACKING_URI:-}" | grep -qE "mlflow|inference-api|host\.docker\.internal|^$"; then
     export MLFLOW_TRACKING_URI="http://${GATEWAY}:5001"
-    echo "MLFLOW_TRACKING_URI overridden to: $MLFLOW_TRACKING_URI"
 fi
-
-if [ -z "$INFERENCE_API_URL" ] || echo "$INFERENCE_API_URL" | grep -q "mlflow\|inference-api\|host.docker.internal"; then
+if echo "${INFERENCE_API_URL:-}" | grep -qE "mlflow|inference-api|host\.docker\.internal|^$"; then
     export INFERENCE_API_URL="http://${GATEWAY}:8000"
-    echo "INFERENCE_API_URL overridden to: $INFERENCE_API_URL"
 fi
 
-echo "Final MLFLOW_TRACKING_URI: $MLFLOW_TRACKING_URI"
-echo "Final INFERENCE_API_URL:   $INFERENCE_API_URL"
+echo "MLFLOW_TRACKING_URI = $MLFLOW_TRACKING_URI"
+echo "INFERENCE_API_URL   = $INFERENCE_API_URL"
 echo ""
 
+# Probar conectividad antes de arrancar
+echo "Testing connectivity..."
+curl -sf "$MLFLOW_TRACKING_URI/" > /dev/null 2>&1 \
+    && echo "MLFlow: reachable" \
+    || echo "MLFlow: NOT reachable (will retry in Python)"
+
+curl -sf "$INFERENCE_API_URL/health" > /dev/null 2>&1 \
+    && echo "InferenceAPI: reachable" \
+    || echo "InferenceAPI: NOT reachable (API tests will be skipped)"
+
+echo ""
 exec python run_tests.py

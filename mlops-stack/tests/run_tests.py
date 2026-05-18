@@ -1,230 +1,180 @@
 """
-run_tests.py
-────────────
-Orquestador de la suite de QA para MLOps.
-
-Ejecuta tres niveles de tests en orden:
-  1. Data Tests      — valida el dataset antes del entrenamiento
-  2. Model Tests     — valida el modelo entrenado antes del deploy
-  3. API Tests       — valida la Inference API en producción
-
-Si cualquier nivel falla, el proceso termina con exit code 1,
-lo que bloquea la promoción del modelo en el pipeline CI/CD.
-
-Todos los resultados se registran en MLFlow como métricas
-del experimento "quality-assurance".
-
-Fundamento (Eken et al., 2025):
-  "Application quality involves unit testing, acceptance testing (PS89),
-   maintaining containerized images and identifying vulnerabilities (PS90)"
-  "Model quality is managed through data collection, model training and
-   evaluation, and monitoring phases (PS111)"
+run_tests.py  ─  MLOps QA Suite Orchestrator
 """
 
-import os
-import sys
-import json
-import time
-import subprocess
-import logging
-import traceback
+import os, sys, json, time, subprocess, logging, traceback
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  [QA]  %(levelname)s  %(message)s",
-    stream=sys.stdout,
-    force=True,
+    stream=sys.stdout, force=True,
 )
 log = logging.getLogger(__name__)
 
-MLFLOW_URI  = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5001")
-API_URL     = os.environ.get("INFERENCE_API_URL",   "http://inference-api:8000")
-MODEL_NAME  = os.environ.get("MODEL_NAME",          "iris-classifier")
-MODEL_STAGE = os.environ.get("MODEL_STAGE",         "Production")
+MLFLOW_URI  = os.environ.get("MLFLOW_TRACKING_URI", "http://host.docker.internal:5001")
+API_URL     = os.environ.get("INFERENCE_API_URL",   "http://host.docker.internal:8000")
+MODEL_NAME  = os.environ.get("MODEL_NAME",  "iris-classifier")
+MODEL_STAGE = os.environ.get("MODEL_STAGE", "Production")
 
-# ── quality gates (umbrales mínimos aceptables) ────────────────────────────
-GATE_MIN_ACCURACY  = float(os.environ.get("GATE_MIN_ACCURACY",  "0.90"))
-GATE_MIN_F1        = float(os.environ.get("GATE_MIN_F1",        "0.90"))
-GATE_MAX_LATENCY_MS= float(os.environ.get("GATE_MAX_LATENCY_MS","500"))
+GATE_MIN_ACCURACY   = float(os.environ.get("GATE_MIN_ACCURACY",   "0.90"))
+GATE_MIN_F1         = float(os.environ.get("GATE_MIN_F1",         "0.90"))
+GATE_MAX_LATENCY_MS = float(os.environ.get("GATE_MAX_LATENCY_MS", "500"))
 
 
-def wait_for(url: str, label: str, retries=15, delay=4):
+def probe(url: str) -> bool:
+    """Intento único, sin espera. Retorna True si el servicio responde."""
     import urllib.request
+    try:
+        urllib.request.urlopen(url, timeout=5)
+        return True
+    except Exception:
+        return False
+
+
+def wait_for(url: str, label: str, retries=20, delay=3) -> bool:
+    import urllib.request
+    log.info(f"Waiting for {label} at {url} ...")
     for i in range(retries):
         try:
-            urllib.request.urlopen(url, timeout=3)
+            urllib.request.urlopen(url, timeout=5)
             log.info(f"{label} ready ✓")
             return True
         except Exception as e:
-            log.info(f"Waiting for {label} ({i+1}/{retries}): {e}")
+            log.info(f"  {label} not ready ({i+1}/{retries}): {e}")
             time.sleep(delay)
-    log.warning(f"{label} not available — some tests may be skipped")
+    log.warning(f"{label} not available after {retries} attempts")
     return False
 
 
-def run_pytest(test_file: str, extra_args: list = None) -> dict:
-    """Ejecuta pytest sobre un archivo y retorna resultados parseados."""
-    report_path = f"/tmp/report_{test_file.replace('/', '_')}.json"
-    cmd = [
+def run_pytest(test_file: str, extra_env: dict = None) -> dict:
+    report = f"/tmp/report_{test_file}.json"
+    cmd    = [
         "python", "-m", "pytest", test_file,
-        "-v",
-        "--tb=short",
-        "--json-report", f"--json-report-file={report_path}",
+        "-v", "--tb=short",
+        "--json-report", f"--json-report-file={report}",
         "--no-header",
     ]
-    if extra_args:
-        cmd.extend(extra_args)
+    env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
 
-    log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
-    # Mostrar output de pytest en el log
-    if result.stdout:
-        for line in result.stdout.strip().split("\n"):
-            log.info(f"  {line}")
+    for line in result.stdout.strip().split("\n"):
+        log.info(f"  {line}")
     if result.returncode not in (0, 1) and result.stderr:
         log.error(result.stderr[:500])
 
-    # Parsear reporte JSON
     try:
-        with open(report_path) as f:
-            report = json.load(f)
+        with open(report) as f:
+            rpt = json.load(f)
         return {
-            "passed":   report["summary"].get("passed", 0),
-            "failed":   report["summary"].get("failed", 0),
-            "errors":   report["summary"].get("error",  0),
-            "total":    report["summary"].get("total",  0),
-            "duration": report.get("duration", 0),
+            "passed":   rpt["summary"].get("passed",  0),
+            "failed":   rpt["summary"].get("failed",  0),
+            "total":    rpt["summary"].get("total",   0),
+            "duration": round(rpt.get("duration", 0), 1),
             "ok":       result.returncode == 0,
         }
     except Exception:
-        return {
-            "passed": 0, "failed": 1, "errors": 0,
-            "total": 1, "duration": 0, "ok": False,
-        }
+        return {"passed": 0, "failed": 1, "total": 1, "duration": 0, "ok": False}
 
 
-def log_results_to_mlflow(results: dict, gates_passed: bool):
-    """Registra todos los resultados de QA en MLFlow."""
+def log_mlflow(results: dict, gates_ok: bool):
     try:
         import mlflow
         mlflow.set_tracking_uri(MLFLOW_URI)
         mlflow.set_experiment("quality-assurance")
-
-        with mlflow.start_run(run_name=f"qa-suite-{time.strftime('%Y%m%d-%H%M%S')}"):
-            # Resultados por nivel
+        with mlflow.start_run(run_name=f"qa-{time.strftime('%Y%m%d-%H%M%S')}"):
             for level, r in results.items():
-                mlflow.log_metric(f"{level}_passed",  r.get("passed",  0))
-                mlflow.log_metric(f"{level}_failed",  r.get("failed",  0))
-                mlflow.log_metric(f"{level}_total",   r.get("total",   0))
-                mlflow.log_metric(f"{level}_ok",      int(r.get("ok", False)))
-                mlflow.log_metric(f"{level}_duration",r.get("duration",0))
-
-            # Quality gates
-            mlflow.log_metric("gates_passed",    int(gates_passed))
-            mlflow.log_metric("suite_ok",        int(gates_passed))
+                mlflow.log_metric(f"{level}_passed",  r["passed"])
+                mlflow.log_metric(f"{level}_failed",  r["failed"])
+                mlflow.log_metric(f"{level}_ok",      int(r["ok"]))
+            mlflow.log_metric("gates_passed", int(gates_ok))
             mlflow.log_params({
-                "gate_min_accuracy":   GATE_MIN_ACCURACY,
-                "gate_min_f1":         GATE_MIN_F1,
-                "gate_max_latency_ms": GATE_MAX_LATENCY_MS,
-                "model_name":          MODEL_NAME,
-                "model_stage":         MODEL_STAGE,
+                "gate_accuracy": GATE_MIN_ACCURACY,
+                "gate_f1":       GATE_MIN_F1,
+                "gate_latency":  GATE_MAX_LATENCY_MS,
             })
             mlflow.set_tag("event_type", "quality_assurance")
-            mlflow.set_tag("promoted",   str(gates_passed))
-
-        log.info("QA results logged to MLFlow ✓")
+        log.info("Results logged to MLFlow ✓")
     except Exception:
-        log.error(f"MLFlow logging failed:\n{traceback.format_exc()}")
+        log.warning(f"MLFlow logging skipped: {traceback.format_exc()}")
 
 
-def print_summary(results: dict, gates_passed: bool):
+def print_summary(results: dict, gates_ok: bool):
     log.info("")
     log.info("╔══════════════════════════════════════════════════════╗")
     log.info("║              QA SUITE — RESULTS SUMMARY              ║")
     log.info("╠══════════════════════════════════════════════════════╣")
-    total_passed = total_failed = 0
     for level, r in results.items():
         status = "✓ PASS" if r["ok"] else "✗ FAIL"
-        log.info(f"║  {level:<20} {status}  "
-                 f"({r['passed']} passed, {r['failed']} failed) "
-                 f"  {r['duration']:.1f}s  ║")
-        total_passed += r["passed"]
-        total_failed += r["failed"]
+        log.info(f"║  {level:<12} {status}  "
+                 f"({r['passed']} passed, {r['failed']} failed, {r['duration']}s)  ║")
     log.info("╠══════════════════════════════════════════════════════╣")
-    gate_status = "✓ PROMOTION ALLOWED" if gates_passed else "✗ PROMOTION BLOCKED"
-    log.info(f"║  {gate_status:<50} ║")
-    log.info(f"║  Total: {total_passed} passed, {total_failed} failed"
-             f"{'':>35}║")
+    verdict = "✓ PROMOTION ALLOWED" if gates_ok else "✗ PROMOTION BLOCKED"
+    log.info(f"║  {verdict:<50} ║")
     log.info("╚══════════════════════════════════════════════════════╝")
 
 
 def main():
-    log.info("╔══════════════════════════════════════════════════════╗")
-    log.info("║          MLOps Quality Assurance Suite               ║")
-    log.info("║          Clase 03 — Testing en MLOps                 ║")
-    log.info("╚══════════════════════════════════════════════════════╝")
-    log.info(f"  MLFLOW_URI:        {MLFLOW_URI}")
-    log.info(f"  API_URL:           {API_URL}")
-    log.info(f"  Gate accuracy:     >= {GATE_MIN_ACCURACY}")
-    log.info(f"  Gate f1:           >= {GATE_MIN_F1}")
-    log.info(f"  Gate latency:      <= {GATE_MAX_LATENCY_MS}ms")
+    log.info("=== MLOps Quality Assurance Suite ===")
+    log.info(f"  MLFLOW_URI = {MLFLOW_URI}")
+    log.info(f"  API_URL    = {API_URL}")
 
-    # Esperar servicios
-    wait_for(f"{MLFLOW_URI}/", "MLFlow")
-    mlflow_ok = True
-    api_ok = wait_for(f"{API_URL}/health", "InferenceAPI", retries=10, delay=3)
+    mlflow_ok = wait_for(f"{MLFLOW_URI}/", "MLFlow")
+    if not mlflow_ok:
+        log.error("MLFlow not reachable — aborting")
+        sys.exit(1)
 
-    results = {}
-    all_ok  = True
+    # Comprobar API una sola vez sin espera larga
+    api_ok = probe(f"{API_URL}/health")
+    log.info(f"InferenceAPI reachable: {api_ok}")
 
-    # ── NIVEL 1: Data Tests ────────────────────────────────────────────────
+    results  = {}
+    all_ok   = True
+
+    # ── Nivel 1: Data Tests ────────────────────────────────────────────────
     log.info("")
     log.info("━━━ LEVEL 1: DATA TESTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     r = run_pytest("test_data.py")
     results["data"] = r
     if not r["ok"]:
-        log.error("Data tests FAILED — pipeline should not proceed to training")
         all_ok = False
+        log.error("Data tests FAILED")
 
-    # ── NIVEL 2: Model Tests (quality gates) ──────────────────────────────
+    # ── Nivel 2: Model Tests ───────────────────────────────────────────────
     log.info("")
-    log.info("━━━ LEVEL 2: MODEL TESTS (QUALITY GATES) ━━━━━━━━━━━━")
-    env_args = [
-        f"--mlflow-uri={MLFLOW_URI}",
-        f"--model-name={MODEL_NAME}",
-        f"--model-stage={MODEL_STAGE}",
-        f"--min-accuracy={GATE_MIN_ACCURACY}",
-        f"--min-f1={GATE_MIN_F1}",
-    ]
-    r = run_pytest("test_model.py", extra_args=env_args)
+    log.info("━━━ LEVEL 2: MODEL TESTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    r = run_pytest("test_model.py", extra_env={
+        "MLFLOW_URI":   MLFLOW_URI,
+        "MODEL_NAME":   MODEL_NAME,
+        "MODEL_STAGE":  MODEL_STAGE,
+        "MIN_ACCURACY": str(GATE_MIN_ACCURACY),
+        "MIN_F1":       str(GATE_MIN_F1),
+    })
     results["model"] = r
     if not r["ok"]:
-        log.error("Model tests FAILED — model does not meet quality gates")
         all_ok = False
+        log.error("Model tests FAILED — model does not meet quality gates")
 
-    # ── NIVEL 3: API Tests ─────────────────────────────────────────────────
+    # ── Nivel 3: API Tests ─────────────────────────────────────────────────
     log.info("")
     log.info("━━━ LEVEL 3: API TESTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     if api_ok:
-        api_args = [
-            f"--api-url={API_URL}",
-            f"--max-latency={GATE_MAX_LATENCY_MS}",
-        ]
-        r = run_pytest("test_api.py", extra_args=api_args)
+        r = run_pytest("test_api.py", extra_env={
+            "API_URL":      API_URL,
+            "MAX_LATENCY":  str(GATE_MAX_LATENCY_MS),
+        })
         results["api"] = r
         if not r["ok"]:
-            log.error("API tests FAILED — inference service has issues")
             all_ok = False
+            log.error("API tests FAILED")
     else:
-        log.warning("Inference API not available — skipping API tests")
-        results["api"] = {"passed": 0, "failed": 0, "total": 0,
-                          "duration": 0, "ok": True}
+        log.warning("InferenceAPI not reachable — skipping API tests")
+        results["api"] = {"passed": 0, "failed": 0, "total": 0, "duration": 0, "ok": True}
 
-    # ── Registrar en MLFlow ────────────────────────────────────────────────
-    log_results_to_mlflow(results, all_ok)
+    log_mlflow(results, all_ok)
     print_summary(results, all_ok)
-
     sys.exit(0 if all_ok else 1)
 
 
