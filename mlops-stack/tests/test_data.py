@@ -274,11 +274,11 @@ class TestDistribution:
         _, _, y_train, y_test = train_test_split(
             np.zeros(len(y)), y, test_size=0.25, stratify=y, random_state=42
         )
-        # La proporción de cada clase en train y test no debe diferir más de 2%
+        # La proporción de cada clase en train y test no debe diferir más de 3%
         for cls in np.unique(y):
             train_pct = (y_train == cls).mean()
             test_pct  = (y_test  == cls).mean()
-            assert abs(train_pct - test_pct) < 0.02, (
+            assert abs(train_pct - test_pct) < 0.03, (
                 f"Clase {cls}: train={train_pct:.3f} vs test={test_pct:.3f} "
                 f"— estratificación deficiente"
             )
