@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guía de Despliegue — MLOps Stack</title>
+<style>
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --card: #20232f; --border: #2e3347;
+  --accent: #6c8fff; --accent2: #4ecdc4; --warn: #ffd93d; --danger: #ff6b6b;
+  --success: #a8e6cf; --purple: #c39bd3; --text: #e8eaf0; --muted: #8891a8;
+  --code-bg: #0d0f18;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+
+.sidebar { position: fixed; top: 0; left: 0; width: 240px; height: 100vh; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; z-index: 100; padding: 20px 0; }
+.main { margin-left: 240px; padding: 40px 48px; max-width: 860px; }
+@media(max-width:860px){ .sidebar{display:none} .main{margin-left:0;padding:24px} }
+
+.sidebar-logo { padding: 0 18px 16px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.sidebar-logo div { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.sidebar-logo strong { font-size: .95rem; color: var(--text); }
+.nav-group { padding: 10px 18px 4px; font-size: .68rem; text-transform: uppercase; letter-spacing: .8px; color: var(--border); margin-top: 6px; }
+.nav-item { display: block; padding: 6px 18px; font-size: .82rem; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; transition: all .15s; }
+.nav-item:hover, .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(108,143,255,.05); }
+.nav-item.c01 { --hue: var(--accent2); }
+.nav-item.c01:hover, .nav-item.c01.active { color: var(--accent2); border-left-color: var(--accent2); background: rgba(78,205,196,.05); }
+.nav-item.c03 { }
+.nav-item.c03:hover, .nav-item.c03.active { color: var(--warn); border-left-color: var(--warn); background: rgba(255,217,61,.05); }
+
+h1 { font-size: 1.9rem; font-weight: 700; margin-bottom: 6px; }
+h2 { font-size: 1.2rem; font-weight: 700; margin: 44px 0 14px; padding-top: 6px; }
+h3 { font-size: .95rem; font-weight: 600; margin: 24px 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-size: .78rem; }
+p { font-size: .9rem; margin-bottom: 12px; }
+ul, ol { font-size: .9rem; margin: 0 0 12px 18px; }
+li { margin-bottom: 4px; }
+strong { color: var(--text); }
+code { font-family: 'Cascadia Code','Fira Code',monospace; }
+p code, li code { background: var(--code-bg); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; font-size: .8rem; color: var(--accent2); }
+
+/* Header */
+.page-header { padding-bottom: 28px; border-bottom: 1px solid var(--border); margin-bottom: 36px; }
+.breadcrumb { font-size: .78rem; color: var(--muted); margin-bottom: 10px; }
+.subtitle { color: var(--muted); font-size: .92rem; margin-top: 4px; }
+.badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.badge { padding: 3px 12px; border-radius: 20px; font-size: .75rem; border: 1px solid var(--border); color: var(--muted); }
+.badge.base { border-color: rgba(108,143,255,.4); color: var(--accent); background: rgba(108,143,255,.08); }
+.badge.c01  { border-color: rgba(78,205,196,.4);  color: var(--accent2); background: rgba(78,205,196,.08); }
+.badge.c03  { border-color: rgba(255,217,61,.4);  color: var(--warn);   background: rgba(255,217,61,.08); }
+
+/* Section headers */
+.section-header { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
+.section-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.section-num { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+/* Command blocks */
+.cmd-block { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; margin: 14px 0; overflow: hidden; }
+.cmd-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: rgba(255,255,255,.03); border-bottom: 1px solid var(--border); }
+.cmd-label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; font-family: monospace; }
+.cmd-copy { font-size: .68rem; color: var(--muted); cursor: pointer; padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--muted); transition: all .15s; }
+.cmd-copy:hover { color: var(--accent); border-color: var(--accent); }
+.cmd-body { padding: 16px 18px; overflow-x: auto; }
+.cmd-body code { font-size: .82rem; color: var(--text); white-space: pre; display: block; line-height: 1.8; }
+.cmd-body code .comment { color: var(--muted); }
+.cmd-body code .dollar { color: var(--accent); user-select: none; }
+.cmd-body code .flag   { color: var(--accent2); }
+.cmd-body code .url    { color: var(--success); }
+.cmd-body code .hi     { color: var(--warn); }
+
+/* Callouts */
+.callout { padding: 13px 16px; border-radius: 6px; margin: 14px 0; font-size: .86rem; border-left: 3px solid; }
+.callout-info    { background: rgba(108,143,255,.07); border-color: var(--accent); }
+.callout-warn    { background: rgba(255,217,61,.07);  border-color: var(--warn); }
+.callout-success { background: rgba(168,230,207,.07); border-color: var(--success); }
+.callout-danger  { background: rgba(255,107,107,.07); border-color: var(--danger); }
+.callout-title { font-weight: 700; margin-bottom: 4px; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; }
+.callout-info    .callout-title { color: var(--accent); }
+.callout-warn    .callout-title { color: var(--warn); }
+.callout-success .callout-title { color: var(--success); }
+.callout-danger  .callout-title { color: var(--danger); }
+
+/* Services table */
+.services { display: grid; gap: 8px; margin: 14px 0; }
+.svc { display: flex; align-items: center; gap: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: .84rem; }
+.svc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.svc-name { font-weight: 600; min-width: 140px; color: var(--text); font-family: monospace; font-size: .82rem; }
+.svc-port { font-family: monospace; font-size: .78rem; color: var(--accent2); min-width: 110px; }
+.svc-desc { color: var(--muted); font-size: .82rem; }
+
+/* Env vars table */
+.env-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: .83rem; }
+.env-table th { background: var(--card); padding: 8px 12px; text-align: left; color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
+.env-table td { padding: 8px 12px; border-bottom: 1px solid rgba(46,51,71,.4); color: var(--muted); vertical-align: top; }
+.env-table tr:last-child td { border-bottom: none; }
+.env-table td:first-child { font-family: monospace; font-size: .8rem; color: var(--accent2); }
+.env-table td:nth-child(2) { color: var(--warn); font-family: monospace; font-size: .8rem; }
+.env-table td strong { color: var(--text); }
+
+/* URLs */
+.url-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.url-item { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 9px 14px; }
+.url-label { font-size: .78rem; color: var(--muted); min-width: 130px; }
+.url-link  { font-family: monospace; font-size: .83rem; color: var(--success); }
+.url-note  { font-size: .75rem; color: var(--muted); margin-left: auto; }
+
+/* Steps inline */
+.steps { counter-reset: s; margin: 14px 0; }
+.step  { display: flex; gap: 12px; margin-bottom: 14px; counter-increment: s; }
+.step::before { content: counter(s); width: 24px; height: 24px; border-radius: 50%; background: rgba(108,143,255,.15); border: 1px solid var(--accent); color: var(--accent); font-size: .75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.step p { margin: 0; font-size: .88rem; color: var(--muted); }
+.step p strong { color: var(--text); }
+
+/* Divider */
+.divider { height: 1px; background: var(--border); margin: 36px 0; }
+
+/* Scenario pills */
+.scenario-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 12px; border-radius: 20px; font-size: .75rem; font-weight: 600; margin-bottom: 10px; }
+
+section { scroll-margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div>MLOps Stack</div>
+    <strong>Guía de Despliegue</strong>
+  </div>
+
+  <div class="nav-group">Preparación</div>
+  <a class="nav-item" href="#prereqs">Requisitos</a>
+  <a class="nav-item" href="#estructura">Estructura</a>
+  <a class="nav-item" href="#build">Build inicial</a>
+  <a class="nav-item" href="#reset">Reset / limpieza</a>
+
+  <div class="nav-group">Tutorial Base</div>
+  <a class="nav-item" href="#base-levantar">Levantar el stack</a>
+  <a class="nav-item" href="#base-entrenar">Entrenar modelo</a>
+  <a class="nav-item" href="#base-urls">URLs y verificación</a>
+  <a class="nav-item" href="#base-detener">Detener</a>
+
+  <div class="nav-group">Clase 01 · Drift</div>
+  <a class="nav-item c01" href="#c01-levantar">Levantar con detector</a>
+  <a class="nav-item c01" href="#c01-observar">Observar ciclos</a>
+  <a class="nav-item c01" href="#c01-parametros">Parámetros</a>
+  <a class="nav-item c01" href="#c01-mlflow">Verificar en MLFlow</a>
+
+  <div class="nav-group">Clase 03 · QA</div>
+  <a class="nav-item c03" href="#c03-build">Build test-runner</a>
+  <a class="nav-item c03" href="#c03-correr">Correr la suite</a>
+  <a class="nav-item c03" href="#c03-niveles">Correr por nivel</a>
+  <a class="nav-item c03" href="#c03-gates">Ajustar quality gates</a>
+  <a class="nav-item c03" href="#c03-mlflow">Resultados en MLFlow</a>
+
+  <div class="nav-group">Referencia</div>
+  <a class="nav-item" href="#completo">Stack completo</a>
+  <a class="nav-item" href="#troubleshoot">Troubleshooting</a>
+</nav>
+
+<main class="main">
+
+<!-- ── HEADER ── -->
+<div class="page-header">
+  <div class="breadcrumb">MLOps Stack · Eken et al. (2025)</div>
+  <h1>Guía de Despliegue</h1>
+  <p class="subtitle">Comandos para levantar el Tutorial Base, Clase 01 (Drift Detection) y Clase 03 (Testing / Quality Gates)</p>
+  <div class="badges">
+    <span class="badge base">Tutorial Base</span>
+    <span class="badge c01">Clase 01 · Continuous Training</span>
+    <span class="badge c03">Clase 03 · Testing MLOps</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     PREPARACIÓN
+══════════════════════════════════════════════════════════════════ -->
+
+<section id="prereqs">
+  <div class="section-header">
+    <div class="section-dot" style="background:var(--muted)"></div>
+    <h2 style="border:none;margin:0;padding:0">Requisitos previos</h2>
+  </div>
+
+  <div class="cmd-block" style="margin-top:14px">
+    <div class="cmd-header"><span class="cmd-label">verificar versiones</span></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>docker --version
+<span class="comment"># Docker version 24.0+</span>
+
+<span class="dollar">$ </span>docker compose version
+<span class="comment"># Docker Compose version v2.20+</span>
+
+<span class="dollar">$ </span>docker info | grep -i memory
+<span class="comment"># Total Memory: al menos 4GB</span></code></div>
+  </div>
+</section>
+
+<section id="estructura">
+  <h2>Estructura del proyecto</h2>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">árbol de directorios</span></div>
+    <div class="cmd-body"><code>mlops-stack/
+├── docker-compose.yml        <span class="comment"># orquestación de todos los servicios</span>
+├── start.sh                  <span class="comment"># script de inicio ordenado</span>
+│
+├── mlflow/                   <span class="comment"># Tracking Server + Model Registry</span>
+├── model-trainer/            <span class="comment"># entrenamiento y registro del modelo</span>
+├── inference-api/            <span class="comment"># FastAPI que sirve predicciones</span>
+├── nginx/                    <span class="comment"># reverse proxy</span>
+│
+├── drift-detector/           <span class="comment"># Clase 01: detección de drift</span>
+└── tests/                    <span class="comment"># Clase 03: suite de QA</span></code></div>
+  </div>
+</section>
+
+<section id="build">
+  <h2>Build inicial (una sola vez)</h2>
+  <p>Construir todas las imágenes antes del primer uso. Toma ~5–10 min dependiendo de la conexión.</p>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Construir todas las imágenes en paralelo</span>
+<span class="dollar">$ </span>docker compose build <span class="flag">--parallel</span>
+
+<span class="comment"># O construir una imagen específica</span>
+<span class="dollar">$ </span>docker compose build mlflow
+<span class="dollar">$ </span>docker compose build inference-api
+<span class="dollar">$ </span>docker compose build drift-detector
+<span class="dollar">$ </span>docker compose build test-runner
+
+<span class="comment"># Forzar rebuild sin cache (si hubo cambios en el código)</span>
+<span class="dollar">$ </span>docker compose build <span class="flag">--no-cache</span> test-runner</code></div>
+  </div>
+</section>
+
+<section id="reset">
+  <h2>Reset y limpieza</h2>
+  <div class="callout callout-warn">
+    <div class="callout-title">⚠ Importante</div>
+    Correr <code>down -v</code> elimina los volúmenes con la base de datos de MLFlow y todos los modelos registrados. El modelo deberá entrenarse nuevamente.
+  </div>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Detener todos los contenedores (conserva datos)</span>
+<span class="dollar">$ </span>docker compose down
+
+<span class="comment"># Detener Y eliminar volúmenes (reset completo)</span>
+<span class="dollar">$ </span>docker compose down <span class="flag">-v</span>
+
+<span class="comment"># Eliminar también las imágenes construidas</span>
+<span class="dollar">$ </span>docker compose down <span class="flag">-v --rmi local</span>
+
+<span class="comment"># Ver qué está corriendo en este momento</span>
+<span class="dollar">$ </span>docker compose ps</code></div>
+  </div>
+</section>
+
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     TUTORIAL BASE
+══════════════════════════════════════════════════════════════════ -->
+
+<div class="scenario-pill" style="background:rgba(108,143,255,.12);color:var(--accent);border:1px solid rgba(108,143,255,.3)">
+  📦 Tutorial Base
+</div>
+
+<section id="base-levantar">
+  <div class="section-header">
+    <div class="section-dot" style="background:var(--accent)"></div>
+    <h2 style="border:none;margin:0;padding:0">Levantar el stack base</h2>
+  </div>
+
+  <p>Servicios incluidos: MLFlow, Inference API, Nginx.</p>
+
+  <h3>Opción A — Script automático (recomendado)</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>bash start.sh</code></div>
+  </div>
+  <p>El script respeta el orden correcto: espera el health check de MLFlow → entrena el modelo → levanta la API → verifica que responde.</p>
+
+  <h3>Opción B — Paso a paso (para entender el flujo)</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># 1. Levantar MLFlow primero</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> mlflow
+
+<span class="comment"># 2. Esperar hasta que esté healthy (~15s)</span>
+<span class="dollar">$ </span>docker compose ps
+<span class="comment"># mlflow-server   running (healthy)</span>
+
+<span class="comment"># 3. Entrenar y registrar el modelo</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> model-trainer
+
+<span class="comment"># 4. Levantar la API y el proxy</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> inference-api nginx
+
+<span class="comment"># 5. Verificar que la API cargó el modelo</span>
+<span class="dollar">$ </span>docker compose logs <span class="flag">--tail=10</span> inference-api</code></div>
+  </div>
+</section>
+
+<section id="base-entrenar">
+  <h2>Reentrenar el modelo manualmente</h2>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Entrenar nueva versión (la promueve a Production automáticamente)</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> model-trainer
+
+<span class="comment"># Recargar el modelo en la API sin reiniciar el contenedor</span>
+<span class="dollar">$ </span>curl <span class="flag">-X POST</span> <span class="url">http://localhost:8000/reload</span></code></div>
+  </div>
+</section>
+
+<section id="base-urls">
+  <h2>URLs y verificación</h2>
+
+  <div class="services">
+    <div class="svc"><div class="svc-dot" style="background:var(--accent)"></div><span class="svc-name">mlflow</span><span class="svc-port">:5001</span><span class="svc-desc">UI de experimentos y Model Registry</span></div>
+    <div class="svc"><div class="svc-dot" style="background:var(--accent2)"></div><span class="svc-name">inference-api</span><span class="svc-port">:8000</span><span class="svc-desc">Endpoint de predicciones (FastAPI)</span></div>
+    <div class="svc"><div class="svc-dot" style="background:var(--muted)"></div><span class="svc-name">nginx</span><span class="svc-port">:80</span><span class="svc-desc">Reverse proxy unificado</span></div>
+  </div>
+
+  <div class="url-list">
+    <div class="url-item"><span class="url-label">MLFlow UI</span><span class="url-link">http://localhost:5001</span></div>
+    <div class="url-item"><span class="url-label">API docs</span><span class="url-link">http://localhost:8000/docs</span></div>
+    <div class="url-item"><span class="url-label">API health</span><span class="url-link">http://localhost:8000/health</span></div>
+    <div class="url-item"><span class="url-label">Via Nginx</span><span class="url-link">http://localhost/mlflow/</span><span class="url-note">proxy → MLFlow</span></div>
+    <div class="url-item"><span class="url-label">Via Nginx</span><span class="url-link">http://localhost/api/</span><span class="url-note">proxy → API</span></div>
+  </div>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">verificar funcionamiento</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Health check de la API</span>
+<span class="dollar">$ </span>curl <span class="url">http://localhost:8000/health</span>
+
+<span class="comment"># Hacer una predicción</span>
+<span class="dollar">$ </span>curl <span class="flag">-X POST</span> <span class="url">http://localhost:8000/predict</span> \
+  <span class="flag">-H</span> "Content-Type: application/json" \
+  <span class="flag">-d</span> '{"instances": [[5.1, 3.5, 1.4, 0.2]]}'
+
+<span class="comment"># Ver logs de todos los servicios</span>
+<span class="dollar">$ </span>docker compose logs <span class="flag">-f</span></code></div>
+  </div>
+</section>
+
+<section id="base-detener">
+  <h2>Detener el stack base</h2>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Detener sin borrar datos (el modelo sigue registrado en MLFlow)</span>
+<span class="dollar">$ </span>docker compose down
+
+<span class="comment"># La próxima vez que levantes, el modelo ya está en el Registry</span>
+<span class="comment"># No necesitas correr model-trainer de nuevo</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> mlflow inference-api nginx</code></div>
+  </div>
+</section>
+
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CLASE 01
+══════════════════════════════════════════════════════════════════ -->
+
+<div class="scenario-pill" style="background:rgba(78,205,196,.12);color:var(--accent2);border:1px solid rgba(78,205,196,.3)">
+  🔄 Clase 01 · Continuous Training — Drift Detection
+</div>
+
+<section id="c01-levantar">
+  <div class="section-header">
+    <div class="section-dot" style="background:var(--accent2)"></div>
+    <h2 style="border:none;margin:0;padding:0">Levantar stack con drift detector</h2>
+  </div>
+
+  <p>El drift detector se agrega al stack base. Requiere que el modelo ya esté entrenado y en Production.</p>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash — primera vez</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># 1. Limpiar estado anterior</span>
+<span class="dollar">$ </span>docker compose down <span class="flag">-v</span>
+
+<span class="comment"># 2. Construir imagen del detector</span>
+<span class="dollar">$ </span>docker compose build drift-detector
+
+<span class="comment"># 3. Levantar MLFlow</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> mlflow
+
+<span class="comment"># 4. Entrenar y registrar el modelo (esperar healthy primero)</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> model-trainer
+
+<span class="comment"># 5. Levantar API e iniciar detector</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> inference-api drift-detector nginx</code></div>
+  </div>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash — si el stack base ya está corriendo</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Agregar solo el detector al stack activo</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> drift-detector</code></div>
+  </div>
+</section>
+
+<section id="c01-observar">
+  <h2>Observar los ciclos de detección</h2>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Seguir logs del detector en tiempo real</span>
+<span class="dollar">$ </span>docker compose logs <span class="flag">-f</span> drift-detector
+
+<span class="comment"># Ver solo los últimos 50 logs</span>
+<span class="dollar">$ </span>docker compose logs <span class="flag">--tail=50</span> drift-detector</code></div>
+  </div>
+
+  <p>Comportamiento esperado en los logs:</p>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">output esperado</span></div>
+    <div class="cmd-body"><code><span class="comment"># Ciclos 0-2: sin drift</span>
+--- Cycle 0  (drift_phase=False) ---
+  Status:         <span class="hi">✓  OK</span>
+  Data drift:     False
+  Consecutive:    0/2
+
+<span class="comment"># Ciclo 3: drift comienza</span>
+--- Cycle 3  (drift_phase=True) ---
+  Status:         <span class="danger">⚠  DRIFT DETECTED</span>
+  Data drift:     True  features=['petal length (cm)', 'petal width (cm)']
+  Consecutive:    1/2
+
+<span class="comment"># Ciclo 4: reentrenamiento disparado</span>
+--- Cycle 4  (drift_phase=True) ---
+  🔁 <span class="hi">RETRAINING TRIGGERED</span>  (consecutive=2)
+  ✅ Promoting Challenger v2 → Production</code></div>
+  </div>
+</section>
+
+<section id="c01-parametros">
+  <h2>Ajustar parámetros del detector</h2>
+  <p>Todos los parámetros son variables de entorno en <code>docker-compose.yml</code>. Cambiarlos y reiniciar el detector:</p>
+
+  <table class="env-table">
+    <tr><th>Variable</th><th>Default</th><th>Descripción</th></tr>
+    <tr><td>KS_P_VALUE_THRESHOLD</td><td>"0.05"</td><td><strong>Umbral KS:</strong> p-value bajo el cual se detecta data drift por feature</td></tr>
+    <tr><td>CHI2_P_VALUE_THRESHOLD</td><td>"0.05"</td><td><strong>Umbral Chi²:</strong> p-value para concept drift sobre distribución de predicciones</td></tr>
+    <tr><td>CONSECUTIVE_DRIFT_WINDOWS</td><td>"2"</td><td><strong>Ventanas consecutivas</strong> con drift antes de disparar reentrenamiento</td></tr>
+    <tr><td>WINDOW_SIZE</td><td>"30"</td><td><strong>Muestras por ventana</strong> de evaluación estadística</td></tr>
+    <tr><td>CHECK_INTERVAL_S</td><td>"30"</td><td><strong>Segundos</strong> entre ciclos de detección</td></tr>
+  </table>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">ejemplo: detector más sensible</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Editar docker-compose.yml y cambiar los valores, luego:</span>
+<span class="dollar">$ </span>docker compose stop drift-detector
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> drift-detector
+
+<span class="comment"># O sobreescribir en línea sin editar el archivo</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> \
+  <span class="flag">-e</span> KS_P_VALUE_THRESHOLD=0.10 \
+  <span class="flag">-e</span> CONSECUTIVE_DRIFT_WINDOWS=1 \
+  <span class="flag">-e</span> CHECK_INTERVAL_S=10 \
+  drift-detector</code></div>
+  </div>
+</section>
+
+<section id="c01-mlflow">
+  <h2>Verificar resultados en MLFlow</h2>
+
+  <div class="url-list">
+    <div class="url-item"><span class="url-label">Drift metrics</span><span class="url-link">http://localhost:5001</span><span class="url-note">Experiment: drift-monitoring</span></div>
+    <div class="url-item"><span class="url-label">Retrain events</span><span class="url-link">http://localhost:5001</span><span class="url-note">Experiment: retraining-events</span></div>
+    <div class="url-item"><span class="url-label">Model versions</span><span class="url-link">http://localhost:5001/#/models/iris-classifier</span><span class="url-note">Registry</span></div>
+  </div>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">verificar vía API</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Ver qué versión está en Production actualmente</span>
+<span class="dollar">$ </span>curl <span class="url">http://localhost:8000/health</span> | python3 <span class="flag">-m</span> json.tool
+
+<span class="comment"># Forzar recarga del modelo (tras promoción manual)</span>
+<span class="dollar">$ </span>curl <span class="flag">-X POST</span> <span class="url">http://localhost:8000/reload</span></code></div>
+  </div>
+
+  <div class="callout callout-success">
+    <div class="callout-title">✓ Qué buscar en MLFlow</div>
+    En el experiment <strong>drift-monitoring</strong>: cada run corresponde a una ventana de detección. Las métricas <code>ks_pval_*</code> bajan gradualmente hasta cruzar el umbral 0.05. En <strong>retraining-events</strong>: los runs con tag <code>triggered_by=drift_detector</code> muestran el historial de reentrenamientos automáticos.
+  </div>
+</section>
+
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CLASE 03
+══════════════════════════════════════════════════════════════════ -->
+
+<div class="scenario-pill" style="background:rgba(255,217,61,.12);color:var(--warn);border:1px solid rgba(255,217,61,.3)">
+  🧪 Clase 03 · Testing en MLOps — Quality Gates
+</div>
+
+<section id="c03-build">
+  <div class="section-header">
+    <div class="section-dot" style="background:var(--warn)"></div>
+    <h2 style="border:none;margin:0;padding:0">Build del test-runner</h2>
+  </div>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Construir imagen del test-runner (necesario antes del primer uso)</span>
+<span class="dollar">$ </span>docker compose build test-runner
+
+<span class="comment"># Si hubo cambios en los archivos de test, forzar rebuild</span>
+<span class="dollar">$ </span>docker compose build <span class="flag">--no-cache</span> test-runner</code></div>
+  </div>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">⚠ Requiere stack base activo</div>
+    El test-runner necesita que MLFlow esté corriendo (para cargar el modelo del Registry). La inference-api es opcional — si no está disponible, los tests de Nivel 3 se saltan automáticamente.
+  </div>
+</section>
+
+<section id="c03-correr">
+  <h2>Correr la suite completa</h2>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash — suite completa (3 niveles)</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Asegurarse de que MLFlow está corriendo</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> mlflow inference-api
+
+<span class="comment"># Correr la suite completa</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner</code></div>
+  </div>
+
+  <p>Output esperado al finalizar:</p>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">output esperado</span></div>
+    <div class="cmd-body"><code>╔══════════════════════════════════════════════════════╗
+║              QA SUITE — RESULTS SUMMARY              ║
+╠══════════════════════════════════════════════════════╣
+║  data         <span class="hi">✓ PASS</span>  (21 passed, 0 failed, 1.2s)    ║
+║  model        <span class="hi">✓ PASS</span>  (13 passed, 0 failed, 3.4s)    ║
+║  api          <span class="hi">✓ PASS</span>  (18 passed, 0 failed, 2.1s)    ║
+╠══════════════════════════════════════════════════════╣
+║  <span class="hi">✓ PROMOTION ALLOWED</span>                                 ║
+╚══════════════════════════════════════════════════════╝</code></div>
+  </div>
+
+  <p>El <strong>exit code</strong> del contenedor indica el resultado:</p>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner; echo "Exit: $?"
+<span class="comment"># Exit: 0  → todos los quality gates pasaron</span>
+<span class="comment"># Exit: 1  → al menos un gate falló → promoción bloqueada</span></code></div>
+  </div>
+</section>
+
+<section id="c03-niveles">
+  <h2>Correr por nivel individual</h2>
+
+  <h3>Nivel 1 — Data Tests</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner \
+  python <span class="flag">-m</span> pytest test_data.py <span class="flag">-v</span>
+
+<span class="comment"># Ver solo los tests fallidos</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner \
+  python <span class="flag">-m</span> pytest test_data.py <span class="flag">-v --tb=short -q</span></code></div>
+  </div>
+
+  <h3>Nivel 2 — Model Tests + Quality Gates</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> \
+  <span class="flag">-e</span> MLFLOW_URI=http://172.18.0.1:5001 \
+  <span class="flag">-e</span> MIN_ACCURACY=0.90 \
+  <span class="flag">-e</span> MIN_F1=0.90 \
+  test-runner python <span class="flag">-m</span> pytest test_model.py <span class="flag">-v</span>
+
+<span class="comment"># Correr solo los quality gates (sin sanity checks ni robustez)</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner \
+  python <span class="flag">-m</span> pytest test_model.py<span class="hi">::TestPerformanceGates</span> <span class="flag">-v</span></code></div>
+  </div>
+
+  <h3>Nivel 3 — API Tests</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> \
+  <span class="flag">-e</span> API_URL=http://172.18.0.1:8000 \
+  <span class="flag">-e</span> MAX_LATENCY=500 \
+  test-runner python <span class="flag">-m</span> pytest test_api.py <span class="flag">-v</span>
+
+<span class="comment"># Solo tests de latencia</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner \
+  python <span class="flag">-m</span> pytest test_api.py<span class="hi">::TestLatency</span> <span class="flag">-v</span>
+
+<span class="comment"># Solo tests de manejo de errores</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner \
+  python <span class="flag">-m</span> pytest test_api.py<span class="hi">::TestErrorHandling</span> <span class="flag">-v</span></code></div>
+  </div>
+</section>
+
+<section id="c03-gates">
+  <h2>Ajustar quality gates</h2>
+
+  <table class="env-table">
+    <tr><th>Variable</th><th>Default</th><th>Descripción</th></tr>
+    <tr><td>GATE_MIN_ACCURACY</td><td>"0.90"</td><td><strong>Accuracy mínima</strong> en el test set para aprobar el gate</td></tr>
+    <tr><td>GATE_MIN_F1</td><td>"0.90"</td><td><strong>F1-score weighted</strong> mínimo aceptable</td></tr>
+    <tr><td>GATE_MAX_LATENCY_MS</td><td>"500"</td><td><strong>Latencia máxima</strong> en ms para el SLA de la API</td></tr>
+  </table>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">ejemplos de configuración</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Ejercicio: hacer fallar el gate de accuracy</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> \
+  <span class="flag">-e</span> GATE_MIN_ACCURACY=<span class="hi">0.99</span> \
+  test-runner
+
+<span class="comment"># Gate más estricto para latencia (200ms SLA)</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> \
+  <span class="flag">-e</span> GATE_MAX_LATENCY_MS=<span class="hi">200</span> \
+  test-runner
+
+<span class="comment"># Gate mínimo (para exploración)</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> \
+  <span class="flag">-e</span> GATE_MIN_ACCURACY=0.50 \
+  <span class="flag">-e</span> GATE_MIN_F1=0.50 \
+  test-runner</code></div>
+  </div>
+</section>
+
+<section id="c03-mlflow">
+  <h2>Resultados en MLFlow</h2>
+
+  <div class="url-list">
+    <div class="url-item"><span class="url-label">QA results</span><span class="url-link">http://localhost:5001</span><span class="url-note">Experiment: quality-assurance</span></div>
+  </div>
+
+  <div class="callout callout-success">
+    <div class="callout-title">✓ Qué buscar en MLFlow</div>
+    Cada ejecución del test-runner genera un run en el experiment <strong>quality-assurance</strong>. Las métricas <code>data_ok</code>, <code>model_ok</code>, <code>api_ok</code> y <code>gates_passed</code> permiten rastrear el historial de QA de cada versión del modelo. El tag <code>promoted=True/False</code> indica si el modelo fue autorizado para producción.
+  </div>
+</section>
+
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STACK COMPLETO
+══════════════════════════════════════════════════════════════════ -->
+
+<section id="completo">
+  <h2>Stack completo — Clases 01 + 03 simultáneas</h2>
+
+  <p>Para demostrar el flujo completo: el detector genera drift → dispara reentrenamiento → el test-runner valida el challenger antes de promoverlo.</p>
+
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash — levantar todo</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># 1. Reset completo</span>
+<span class="dollar">$ </span>docker compose down <span class="flag">-v</span>
+
+<span class="comment"># 2. Build de todas las imágenes</span>
+<span class="dollar">$ </span>docker compose build <span class="flag">--parallel</span>
+
+<span class="comment"># 3. Levantar MLFlow</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> mlflow
+
+<span class="comment"># 4. Esperar health check (~15s)</span>
+<span class="dollar">$ </span>docker compose ps
+
+<span class="comment"># 5. Entrenar modelo inicial</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> model-trainer
+
+<span class="comment"># 6. Levantar todos los servicios</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> inference-api drift-detector nginx
+
+<span class="comment"># 7. Verificar que todo está corriendo</span>
+<span class="dollar">$ </span>docker compose ps
+
+<span class="comment"># 8. Correr la suite de QA sobre el modelo inicial</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner
+
+<span class="comment"># 9. Seguir los logs del detector en otra terminal</span>
+<span class="dollar">$ </span>docker compose logs <span class="flag">-f</span> drift-detector</code></div>
+  </div>
+
+  <div class="services">
+    <div class="svc"><div class="svc-dot" style="background:var(--accent)"></div><span class="svc-name">mlflow</span><span class="svc-port">:5001</span><span class="svc-desc">Tracking Server + Model Registry</span></div>
+    <div class="svc"><div class="svc-dot" style="background:var(--accent2)"></div><span class="svc-name">inference-api</span><span class="svc-port">:8000</span><span class="svc-desc">Sirve predicciones en producción</span></div>
+    <div class="svc"><div class="svc-dot" style="background:var(--accent2)"></div><span class="svc-name">drift-detector</span><span class="svc-port">—</span><span class="svc-desc">Monitoreo continuo + reentrenamiento automático</span></div>
+    <div class="svc"><div class="svc-dot" style="background:var(--warn)"></div><span class="svc-name">test-runner</span><span class="svc-port">—</span><span class="svc-desc">Suite QA (se invoca manualmente)</span></div>
+    <div class="svc"><div class="svc-dot" style="background:var(--muted)"></div><span class="svc-name">nginx</span><span class="svc-port">:80</span><span class="svc-desc">Reverse proxy unificado</span></div>
+  </div>
+</section>
+
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     TROUBLESHOOTING
+══════════════════════════════════════════════════════════════════ -->
+
+<section id="troubleshoot">
+  <h2>Troubleshooting</h2>
+
+  <h3>MLFlow no arranca (unhealthy)</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">diagnóstico</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>docker compose logs mlflow
+<span class="comment"># Si dice "unable to open database file" → problema de permisos en volumen</span>
+
+<span class="comment"># Solución: reset de volúmenes</span>
+<span class="dollar">$ </span>docker compose down <span class="flag">-v</span>
+<span class="dollar">$ </span>docker compose up <span class="flag">-d</span> mlflow</code></div>
+  </div>
+
+  <h3>inference-api no carga el modelo</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">diagnóstico</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>docker compose logs inference-api
+<span class="comment"># Si dice "degraded" → el modelo no está en Production en el Registry</span>
+
+<span class="comment"># Solución: entrenar primero</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> model-trainer
+
+<span class="comment"># Verificar que hay un modelo en Production</span>
+<span class="dollar">$ </span>curl <span class="url">http://localhost:5001/api/2.0/mlflow/registered-models/get</span> \
+  <span class="flag">--data-urlencode</span> "name=iris-classifier"</code></div>
+  </div>
+
+  <h3>test-runner no alcanza inference-api</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">diagnóstico</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Ver qué IP detectó el entrypoint</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> test-runner cat /proc/net/route
+<span class="comment"># La gateway es la IP del host en la red Docker bridge</span>
+
+<span class="comment"># Si el entrypoint detectó la IP incorrecta, sobreescribir manualmente</span>
+<span class="comment"># Primero encontrar la IP correcta:</span>
+<span class="dollar">$ </span>docker network inspect mlops-stack_mlops-net | grep Gateway
+
+<span class="comment"># Luego correr con esa IP (ejemplo: 172.18.0.1)</span>
+<span class="dollar">$ </span>docker compose run <span class="flag">--rm</span> \
+  <span class="flag">-e</span> MLFLOW_TRACKING_URI=http://<span class="hi">172.18.0.1</span>:5001 \
+  <span class="flag">-e</span> INFERENCE_API_URL=http://<span class="hi">172.18.0.1</span>:8000 \
+  test-runner</code></div>
+  </div>
+
+  <h3>drift-detector no genera experimentos en MLFlow</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">diagnóstico</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="dollar">$ </span>docker compose logs drift-detector
+<span class="comment"># Buscar líneas con "MLFlow logging failed" o "IMPORT ERROR"</span>
+
+<span class="comment"># Si el contenedor no aparece corriendo:</span>
+<span class="dollar">$ </span>docker compose ps drift-detector
+
+<span class="comment"># Restart del detector</span>
+<span class="dollar">$ </span>docker compose restart drift-detector
+<span class="dollar">$ </span>docker compose logs <span class="flag">-f</span> drift-detector</code></div>
+  </div>
+
+  <h3>Puerto 5001 o 8000 ocupado</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">diagnóstico y solución</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Ver qué proceso usa el puerto</span>
+<span class="dollar">$ </span>lsof <span class="flag">-i</span> TCP:5001
+<span class="dollar">$ </span>lsof <span class="flag">-i</span> TCP:8000
+
+<span class="comment"># En macOS: el puerto 5000 lo usa AirPlay — por eso usamos 5001</span>
+<span class="comment"># Si 5001 también está ocupado, cambiar en docker-compose.yml:</span>
+<span class="comment"># ports: "5002:5001"  (host:container)</span></code></div>
+  </div>
+
+  <h3>Comandos de diagnóstico generales</h3>
+  <div class="cmd-block">
+    <div class="cmd-header"><span class="cmd-label">bash</span><button class="cmd-copy" onclick="copyCmd(this)">copiar</button></div>
+    <div class="cmd-body"><code><span class="comment"># Estado de todos los contenedores</span>
+<span class="dollar">$ </span>docker compose ps
+
+<span class="comment"># Logs de todos los servicios simultáneamente</span>
+<span class="dollar">$ </span>docker compose logs <span class="flag">-f --tail=20</span>
+
+<span class="comment"># Logs de un servicio específico</span>
+<span class="dollar">$ </span>docker compose logs <span class="flag">-f</span> mlflow
+<span class="dollar">$ </span>docker compose logs <span class="flag">-f</span> inference-api
+<span class="dollar">$ </span>docker compose logs <span class="flag">-f</span> drift-detector
+
+<span class="comment"># Entrar a un contenedor para inspeccionar</span>
+<span class="dollar">$ </span>docker compose exec mlflow bash
+<span class="dollar">$ </span>docker compose exec inference-api bash
+
+<span class="comment"># Ver uso de recursos</span>
+<span class="dollar">$ </span>docker stats</code></div>
+  </div>
+</section>
+
+</main>
+
+<script>
+function copyCmd(btn) {
+  const block = btn.closest('.cmd-block').querySelector('.cmd-body code');
+  const text  = block.innerText
+    .replace(/^\$ /gm, '')           // quitar prompts
+    .replace(/^#.*$/gm, '')          // quitar comentarios
+    .replace(/\n{3,}/g, '\n\n')      // colapsar líneas vacías
+    .trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ copiado';
+    btn.style.color = 'var(--success)';
+    btn.style.borderColor = 'var(--success)';
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 1800);
+  });
+}
+
+// Highlight nav on scroll
+const sections = document.querySelectorAll('section[id]');
+const navItems = document.querySelectorAll('.nav-item[href]');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navItems.forEach(n => n.classList.remove('active'));
+      const a = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { threshold: 0.4 });
+sections.forEach(s => obs.observe(s));
+</script>
+
+</body>
+</html>
