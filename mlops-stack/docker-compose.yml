@@ -51,8 +51,6 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
-    # Health check permisivo: la API puede estar "degraded" (sin modelo aún)
-    # y seguir siendo válida como contenedor corriendo
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 10s
@@ -62,6 +60,7 @@ services:
     networks:
       - mlops-net
 
+  # ── Clase 01: Drift Detector ────────────────────────────────────────────
   drift-detector:
     build: ./drift-detector
     container_name: drift-detector
@@ -76,10 +75,32 @@ services:
       CHECK_INTERVAL_S:          "30"
     volumes:
       - mlflow-data:/mlflow
-    # Solo depende de MLFlow — espera a la API por su cuenta en el código
     depends_on:
       mlflow:
         condition: service_healthy
+    networks:
+      - mlops-net
+
+  # ── Clase 03: Test Runner ───────────────────────────────────────────────
+  test-runner:
+    build: ./tests
+    container_name: test-runner
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      INFERENCE_API_URL:   http://inference-api:8000
+      MODEL_NAME:          iris-classifier
+      MODEL_STAGE:         Production
+      # Quality gates configurables
+      GATE_MIN_ACCURACY:   "0.90"
+      GATE_MIN_F1:         "0.90"
+      GATE_MAX_LATENCY_MS: "500"
+    volumes:
+      - mlflow-data:/mlflow
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    profiles:
+      - testing     # solo se ejecuta con: docker compose --profile testing run test-runner
     networks:
       - mlops-net
 

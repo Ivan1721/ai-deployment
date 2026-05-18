@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clase 03 — Testing en MLOps: Quality Gates</title>
+<style>
+  :root {
+    --bg:#0f1117;--surface:#1a1d27;--card:#20232f;--border:#2e3347;
+    --accent:#6c8fff;--accent2:#4ecdc4;--warn:#ffd93d;--danger:#ff6b6b;
+    --success:#a8e6cf;--text:#e8eaf0;--muted:#8891a8;--code-bg:#141720;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.7}
+  .sidebar{position:fixed;top:0;left:0;width:260px;height:100vh;background:var(--surface);border-right:1px solid var(--border);padding:24px 0;overflow-y:auto;z-index:100}
+  .main{margin-left:260px;padding:48px;max-width:900px}
+  @media(max-width:900px){.sidebar{display:none}.main{margin-left:0;padding:24px}}
+  .sidebar-title{padding:0 20px 16px;font-size:.75rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:12px}
+  .nav-item{display:block;padding:8px 20px;font-size:.85rem;color:var(--muted);text-decoration:none;transition:all .15s;border-left:2px solid transparent}
+  .nav-item:hover,.nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(108,143,255,.06)}
+  .nav-section{padding:12px 20px 4px;font-size:.7rem;text-transform:uppercase;letter-spacing:.8px;color:var(--border);margin-top:8px}
+  h1{font-size:2rem;font-weight:700;margin-bottom:8px}
+  h2{font-size:1.35rem;font-weight:600;margin:48px 0 16px;padding-top:8px;border-top:1px solid var(--border);color:var(--accent)}
+  h3{font-size:1.05rem;font-weight:600;margin:28px 0 10px}
+  h4{font-size:.9rem;font-weight:600;margin:20px 0 8px;color:var(--accent2)}
+  p{margin-bottom:14px;font-size:.93rem}
+  ul,ol{margin:0 0 14px 20px;font-size:.93rem}
+  li{margin-bottom:5px}
+  strong{color:var(--text)}
+  .page-header{margin-bottom:40px;padding-bottom:24px;border-bottom:1px solid var(--border)}
+  .breadcrumb{font-size:.8rem;color:var(--muted);margin-bottom:12px}
+  .meta-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
+  .meta-badge{padding:4px 12px;border-radius:20px;font-size:.78rem;border:1px solid var(--border);color:var(--muted)}
+  .meta-badge.blue{border-color:rgba(108,143,255,.4);color:var(--accent);background:rgba(108,143,255,.08)}
+  .meta-badge.green{border-color:rgba(168,230,207,.4);color:var(--success);background:rgba(168,230,207,.08)}
+  .meta-badge.yellow{border-color:rgba(255,217,61,.4);color:var(--warn);background:rgba(255,217,61,.08)}
+  .callout{padding:16px 20px;border-radius:8px;margin:20px 0;font-size:.88rem;border-left:3px solid}
+  .callout-info{background:rgba(108,143,255,.07);border-color:var(--accent)}
+  .callout-warn{background:rgba(255,217,61,.07);border-color:var(--warn)}
+  .callout-success{background:rgba(168,230,207,.07);border-color:var(--success)}
+  .callout-danger{background:rgba(255,107,107,.07);border-color:var(--danger)}
+  .callout-title{font-weight:700;margin-bottom:6px;font-size:.82rem;text-transform:uppercase;letter-spacing:.5px}
+  .callout-info .callout-title{color:var(--accent)}
+  .callout-warn .callout-title{color:var(--warn)}
+  .callout-success .callout-title{color:var(--success)}
+  .callout-danger .callout-title{color:var(--danger)}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:20px;overflow-x:auto;margin:16px 0;position:relative}
+  code{font-family:'Cascadia Code','Fira Code',monospace;font-size:.83rem}
+  p code,li code{background:var(--code-bg);padding:2px 6px;border-radius:4px;font-size:.82rem;border:1px solid var(--border)}
+  .code-label{position:absolute;top:8px;right:12px;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .pyramid{margin:24px auto;max-width:520px;text-align:center}
+  .pyr-level{margin:3px auto;border-radius:6px;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;font-size:.88rem}
+  .pyr-label{font-weight:600}
+  .pyr-sub{font-size:.78rem;opacity:.7}
+  .pyr-count{font-size:.78rem;opacity:.6}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0}
+  @media(max-width:700px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px}
+  .card h4{margin-top:0}
+  .card p{font-size:.84rem;color:var(--muted);margin:0}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem}
+  th{background:var(--card);padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+  td{padding:10px 14px;border-bottom:1px solid rgba(46,51,71,.5);color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  td strong{color:var(--text)}
+  .exercise{border:1px solid var(--warn);border-radius:8px;padding:20px;margin:24px 0;background:rgba(255,217,61,.04)}
+  .exercise-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .exercise-num{background:var(--warn);color:#1a1a1a;font-weight:700;font-size:.75rem;padding:2px 10px;border-radius:20px}
+  .exercise h4{margin:0;color:var(--warn)}
+  .steps{counter-reset:step;margin:20px 0}
+  .step{display:flex;gap:16px;margin-bottom:20px}
+  .step-num{counter-increment:step;display:flex;align-items:flex-start;padding-top:2px}
+  .step-num::before{content:counter(step);width:28px;height:28px;border-radius:50%;background:rgba(108,143,255,.15);border:1px solid var(--accent);color:var(--accent);font-size:.8rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .step-body h4{margin-top:0}
+  .step-body p{font-size:.88rem;color:var(--muted);margin:0}
+  .gate-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:4px;font-size:.75rem;font-weight:600}
+  .gate-pass{background:rgba(168,230,207,.15);color:var(--success);border:1px solid rgba(168,230,207,.3)}
+  .gate-fail{background:rgba(255,107,107,.15);color:var(--danger);border:1px solid rgba(255,107,107,.3)}
+  section{scroll-margin-top:24px}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-title">Clase 03 · MLOps</div>
+  <div class="nav-section">Teoría</div>
+  <a class="nav-item" href="#objetivos">Objetivos</a>
+  <a class="nav-item" href="#piramide">Pirámide de tests</a>
+  <a class="nav-item" href="#quality-gates">Quality Gates</a>
+  <div class="nav-section">Implementación</div>
+  <a class="nav-item" href="#nivel1">Nivel 1 · Data Tests</a>
+  <a class="nav-item" href="#nivel2">Nivel 2 · Model Tests</a>
+  <a class="nav-item" href="#nivel3">Nivel 3 · API Tests</a>
+  <a class="nav-item" href="#orquestador">Orquestador</a>
+  <a class="nav-item" href="#compose">docker-compose</a>
+  <div class="nav-section">Práctica</div>
+  <a class="nav-item" href="#ejecutar">Cómo ejecutar</a>
+  <a class="nav-item" href="#ejercicios">Ejercicios</a>
+  <a class="nav-item" href="#discusion">Discusión</a>
+  <a class="nav-item" href="#referencias">Referencias</a>
+</nav>
+
+<main class="main">
+
+<div class="page-header">
+  <div class="breadcrumb">MLOps Stack · Tutorial Base → Clase 03</div>
+  <h1>Testing en MLOps</h1>
+  <p style="color:var(--muted);font-size:1rem;margin:0">Quality Gates: tests de datos, modelo y API que bloquean la promoción</p>
+  <div class="meta-row">
+    <span class="meta-badge blue">Pipeline & Automatización</span>
+    <span class="meta-badge yellow">Intermedio · 3–4 h</span>
+    <span class="meta-badge green">Nuevo servicio: test-runner</span>
+  </div>
+</div>
+
+<section id="objetivos">
+  <h2>Objetivos de aprendizaje</h2>
+  <ul>
+    <li>Distinguir los tres niveles de testing en MLOps: datos, modelo y API.</li>
+    <li>Implementar <strong>quality gates</strong> que bloquean automáticamente la promoción de modelos deficientes.</li>
+    <li>Escribir tests estadísticos de integridad de datos con pytest.</li>
+    <li>Validar el contrato de una Inference API con tests de integración reales (sin mocks).</li>
+    <li>Registrar resultados de QA como métricas en MLFlow para trazabilidad.</li>
+    <li>Configurar el test-runner como servicio Docker con <code>profiles</code>.</li>
+  </ul>
+</section>
+
+<section id="piramide">
+  <h2>La pirámide de tests en MLOps</h2>
+
+  <p>El testing en software tradicional sigue la pirámide clásica (muchos unit tests, pocos E2E). En MLOps, la pirámide tiene una dimensión adicional: <strong>los datos</strong> son un artefacto que también debe testearse.</p>
+
+  <div class="pyramid">
+    <div class="pyr-level" style="width:40%;background:rgba(255,107,107,0.15);border:1px solid rgba(255,107,107,0.3)">
+      <span class="pyr-label" style="color:#ff6b6b">API Tests</span>
+      <span class="pyr-count" style="color:#ff6b6b">test_api.py</span>
+    </div>
+    <div class="pyr-level" style="width:65%;background:rgba(255,217,61,0.12);border:1px solid rgba(255,217,61,0.3)">
+      <span class="pyr-label" style="color:#ffd93d">Model Tests + Quality Gates</span>
+      <span class="pyr-count" style="color:#ffd93d">test_model.py</span>
+    </div>
+    <div class="pyr-level" style="width:90%;background:rgba(168,230,207,0.1);border:1px solid rgba(168,230,207,0.3)">
+      <span class="pyr-label" style="color:#a8e6cf">Data Tests</span>
+      <span class="pyr-count" style="color:#a8e6cf">test_data.py</span>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:12px">Más tests → base más amplia → ejecución más frecuente</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>📦 Nivel 1 · Data Tests</h4>
+      <p>Corren <strong>antes del entrenamiento</strong>. Validan schema, completitud, rangos, balance de clases. Si fallan, el pipeline no debe proceder.</p>
+    </div>
+    <div class="card">
+      <h4>🧠 Nivel 2 · Model Tests</h4>
+      <p>Corren <strong>después del entrenamiento, antes del deploy</strong>. Implementan quality gates: accuracy, F1, robustez, sanity checks contra baseline.</p>
+    </div>
+    <div class="card">
+      <h4>🌐 Nivel 3 · API Tests</h4>
+      <p>Corren <strong>contra la API en producción</strong>. Validan contrato, latencia SLA, manejo de errores. Sin mocks — contra el servicio real.</p>
+    </div>
+    <div class="card">
+      <h4>📊 MLFlow Integration</h4>
+      <p>Todos los resultados se registran como métricas en el experimento <code>quality-assurance</code>. La decisión de promoción queda completamente trazada.</p>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Fundamento teórico · Eken et al. (2025)</div>
+    <p>"Data quality involves assessing the scientific quality of data with domain experts, checking data completeness, checking consistency in data format and structure." (PS62, PS24, PS151)</p>
+    <p style="margin:8px 0 0">"Model quality involves assessing the model's predictive performance through performance metrics and test sets (PS21), <strong>validating model bias and fairness</strong> (PS100), monitoring model to detect overfitting issues (PS59)." (Sección 3.2.8)</p>
+  </div>
+</section>
+
+<section id="quality-gates">
+  <h2>Quality Gates: el concepto clave</h2>
+
+  <p>Un <strong>quality gate</strong> es una condición binaria que debe cumplirse para que el pipeline continúe. Si falla, la promoción se bloquea automáticamente — sin intervención humana.</p>
+
+  <table>
+    <tr><th>Gate</th><th>Umbral default</th><th>Consecuencia si falla</th></tr>
+    <tr><td><strong>Accuracy mínima</strong></td><td><code>0.90</code></td><td>Modelo no se promueve a Production</td></tr>
+    <tr><td><strong>F1-score weighted</strong></td><td><code>0.90</code></td><td>Modelo no se promueve a Production</td></tr>
+    <tr><td><strong>Recall por clase</strong></td><td><code>0.80</code></td><td>Modelo no se promueve a Production</td></tr>
+    <tr><td><strong>Latencia P50</strong></td><td><code>500ms</code></td><td>API falla los acceptance tests</td></tr>
+    <tr><td><strong>Data completeness</strong></td><td><code>0% nulos</code></td><td>Pipeline no inicia entrenamiento</td></tr>
+  </table>
+
+  <p>Todos los umbrales son <strong>configurables vía variables de entorno</strong> en docker-compose, sin necesidad de modificar el código.</p>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">⚠ Automation Decision Dilemma</div>
+    <p>Eken et al. (2025) identifica este dilema explícitamente: "model validation processes require communication and approval from regulatory agencies, fairness and bias identification and analysis, root cause analysis from monitoring alerts." No todo debe automatizarse. Los quality gates automáticos funcionan para umbrales técnicos objetivos; decisiones de negocio o regulatorias requieren revisión humana.</p>
+  </div>
+</section>
+
+<section id="nivel1">
+  <h2>Nivel 1: Data Tests</h2>
+  <p>Archivo: <code>tests/test_data.py</code></p>
+
+  <h3>Categorías de tests implementadas</h3>
+  <table>
+    <tr><th>Clase</th><th>Tests</th><th>Qué detecta</th></tr>
+    <tr><td><strong>TestCompleteness</strong></td><td>4</td><td>Nulos, tamaño mínimo, alineación features/target</td></tr>
+    <tr><td><strong>TestSchema</strong></td><td>7</td><td>Nombres de features, tipos, número de clases, etiquetas válidas</td></tr>
+    <tr><td><strong>TestRangesAndConsistency</strong></td><td>6</td><td>Rangos biológicos, negativos, infinitos, duplicados</td></tr>
+    <tr><td><strong>TestDistribution</strong></td><td>4</td><td>Balance de clases, varianza cero, multicolinealidad perfecta, stratificación</td></tr>
+  </table>
+
+  <h3>Ejemplo representativo</h3>
+  <pre><code><span class="code-label">test_data.py</span>def test_class_balance(self, iris_data):
+    """
+    Las clases deben estar razonablemente balanceadas.
+    Si una clase tiene menos del 10% → posible sesgo severo.
+    """
+    _, y, _, _ = iris_data
+    counts = pd.Series(y).value_counts()
+    for cls, count in counts.items():
+        pct = count / len(y)
+        assert pct >= 0.10, (
+            f"Clase {cls} tiene solo {pct:.1%} — posible clase minoritaria"
+        )</code></pre>
+</section>
+
+<section id="nivel2">
+  <h2>Nivel 2: Model Tests + Quality Gates</h2>
+  <p>Archivo: <code>tests/test_model.py</code></p>
+
+  <h3>Categorías</h3>
+  <table>
+    <tr><th>Clase</th><th>Tests</th><th>Qué valida</th></tr>
+    <tr><td><strong>TestPerformanceGates</strong></td><td>5</td><td>Accuracy, F1, recall por clase, precision, CV stability</td></tr>
+    <tr><td><strong>TestSanityChecks</strong></td><td>4</td><td>Mejor que baseline aleatorio, predice todas las clases, confusión máxima</td></tr>
+    <tr><td><strong>TestRobustness</strong></td><td>7</td><td>Shape correcto, probabilidades válidas, single sample, batch, determinismo</td></tr>
+    <tr><td><strong>TestMLFlowRegistry</strong></td><td>3</td><td>Modelo existe en Registry, tiene métrica accuracy, tiene parámetros mínimos</td></tr>
+  </table>
+
+  <h3>El sanity check más importante</h3>
+  <pre><code><span class="code-label">test_model.py</span>def test_better_than_random_baseline(self, model, iris_splits):
+    """
+    El modelo DEBE superar un clasificador aleatorio por al menos 20%.
+    Si no lo supera, algo salió muy mal en el entrenamiento.
+    """
+    X_train, X_test, y_train, y_test, _ = iris_splits
+    baseline = DummyClassifier(strategy="stratified", random_state=42)
+    baseline.fit(X_train, y_train)
+
+    baseline_acc = accuracy_score(y_test, baseline.predict(X_test))
+    model_acc    = accuracy_score(y_test, model.predict(X_test))
+
+    assert model_acc >= baseline_acc + 0.20, (
+        f"El modelo ({model_acc:.4f}) no supera al baseline "
+        f"({baseline_acc:.4f}) por el margen mínimo de 0.20"
+    )</code></pre>
+
+  <div class="callout callout-success">
+    <div class="callout-title">Quality Gate inline en train.py</div>
+    <p>Además de los tests en el contenedor separado, <code>train.py</code> incluye una función <code>run_quality_gate()</code> que evalúa accuracy y F1 inmediatamente después del entrenamiento. Si falla, el modelo no se registra en el Registry. Es la primera línea de defensa, antes de que el test-runner entre en acción.</p>
+  </div>
+</section>
+
+<section id="nivel3">
+  <h2>Nivel 3: API Tests</h2>
+  <p>Archivo: <code>tests/test_api.py</code></p>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Sin mocks</div>
+    <p>Estos tests llaman a la Inference API real en la red Docker. No usan mocks ni stubs. Esto verifica que el sistema funciona de extremo a extremo, incluyendo la serialización JSON, el routing de FastAPI y la carga del modelo desde MLFlow.</p>
+  </div>
+
+  <h3>Categorías</h3>
+  <table>
+    <tr><th>Clase</th><th>Tests</th><th>Qué valida</th></tr>
+    <tr><td><strong>TestHealthEndpoints</strong></td><td>6</td><td>Status 200, campo status=ok, model_version, stage, /info</td></tr>
+    <tr><td><strong>TestPredictContract</strong></td><td>11</td><td>Schema completo de request/response, consistencia class_id/name, predicciones correctas de setosa y virginica</td></tr>
+    <tr><td><strong>TestLatency</strong></td><td>3</td><td>Single prediction SLA, promedio de 10 requests, batch latency</td></tr>
+    <tr><td><strong>TestErrorHandling</strong></td><td>4</td><td>3 features → 422, 5 features → 422, lista vacía → 4xx, strings → 422</td></tr>
+  </table>
+
+  <h3>Test de latencia con SLA</h3>
+  <pre><code><span class="code-label">test_api.py</span>def test_average_latency_over_10_requests(self, api_url, max_latency_ms):
+    """La latencia promedio en 10 requests no debe exceder el SLA."""
+    latencies = []
+    for _ in range(10):
+        _, _, lat = http_post(f"{api_url}/predict", VALID_SINGLE)
+        latencies.append(lat)
+    avg = sum(latencies) / len(latencies)
+    assert avg < max_latency_ms, (
+        f"Latencia promedio {avg:.1f}ms excede el SLA de {max_latency_ms}ms\n"
+        f"Latencias: {[f'{l:.0f}' for l in latencies]}"
+    )</code></pre>
+</section>
+
+<section id="orquestador">
+  <h2>Orquestador: run_tests.py</h2>
+  <p>Corre los tres niveles en orden, registra todo en MLFlow y termina con exit code 0 (OK) o 1 (falló). El exit code es lo que CI/CD usa para decidir si bloquear el pipeline.</p>
+
+  <pre><code><span class="code-label">run_tests.py · flujo</span># Nivel 1 → Data Tests
+r1 = run_pytest("test_data.py")
+if not r1["ok"]: all_ok = False   # ← bloquea pipeline
+
+# Nivel 2 → Model Tests (quality gates configurables)
+r2 = run_pytest("test_model.py", args=["--min-accuracy=0.90", ...])
+if not r2["ok"]: all_ok = False   # ← modelo no se promueve
+
+# Nivel 3 → API Tests (solo si la API está disponible)
+r3 = run_pytest("test_api.py", args=["--max-latency=500"])
+if not r3["ok"]: all_ok = False
+
+# Registrar todo en MLFlow experiment "quality-assurance"
+log_results_to_mlflow(results, all_ok)
+
+sys.exit(0 if all_ok else 1)  # ← CI/CD lee este código</code></pre>
+
+  <p>El output del orquestador en caso de éxito:</p>
+  <pre><code><span class="code-label">Salida esperada</span>╔══════════════════════════════════════════════════════╗
+║              QA SUITE — RESULTS SUMMARY              ║
+╠══════════════════════════════════════════════════════╣
+║  data                 ✓ PASS  (21 passed, 0 failed)  ║
+║  model                ✓ PASS  (19 passed, 0 failed)  ║
+║  api                  ✓ PASS  (24 passed, 0 failed)  ║
+╠══════════════════════════════════════════════════════╣
+║  ✓ PROMOTION ALLOWED                                 ║
+╚══════════════════════════════════════════════════════╝</code></pre>
+</section>
+
+<section id="compose">
+  <h2>Configuración docker-compose</h2>
+  <p>El <code>test-runner</code> usa Docker Compose <strong>profiles</strong> para no ejecutarse automáticamente con <code>docker compose up</code>. Solo corre cuando se invoca explícitamente.</p>
+  <pre><code><span class="code-label">docker-compose.yml · fragmento</span>test-runner:
+    build: ./tests
+    environment:
+      GATE_MIN_ACCURACY:   "0.90"   # ← configurable sin tocar código
+      GATE_MIN_F1:         "0.90"
+      GATE_MAX_LATENCY_MS: "500"
+    profiles:
+      - testing             # ← solo corre con --profile testing</code></pre>
+</section>
+
+<section id="ejecutar">
+  <h2>Cómo ejecutar la suite</h2>
+  <div class="steps">
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <h4>Asegurarse de que el stack está corriendo</h4>
+      <p><code>docker compose up -d mlflow inference-api</code> (el modelo debe estar entrenado y en Production)</p>
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <h4>Construir el test-runner</h4>
+      <p><code>docker compose --profile testing build test-runner</code></p>
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <h4>Ejecutar la suite completa</h4>
+      <p><code>docker compose --profile testing run --rm test-runner</code></p>
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <h4>Ver resultados en MLFlow</h4>
+      <p>Abrir <code>http://localhost:5001</code> → Experiment <code>quality-assurance</code></p>
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <h4>Correr solo un nivel específico</h4>
+      <p><code>docker compose --profile testing run --rm test-runner python -m pytest test_data.py -v</code></p>
+    </div></div>
+  </div>
+</section>
+
+<section id="ejercicios">
+  <h2>Ejercicios</h2>
+
+  <div class="exercise">
+    <div class="exercise-header"><span class="exercise-num">Ejercicio 1</span><h4>Hacer fallar un quality gate deliberadamente</h4></div>
+    <ol>
+      <li>En <code>docker-compose.yml</code>, cambia <code>GATE_MIN_ACCURACY</code> a <code>"0.99"</code></li>
+      <li>Ejecuta el test-runner: <code>docker compose --profile testing run --rm test-runner</code></li>
+      <li>Observa el mensaje <code>QUALITY GATE FAILED</code> y el exit code 1</li>
+      <li>Verifica en MLFlow que el run de <code>quality-assurance</code> registra <code>gates_passed=0</code></li>
+      <li>Restaura el umbral a <code>0.90</code> y vuelve a correr — debe pasar</li>
+    </ol>
+  </div>
+
+  <div class="exercise">
+    <div class="exercise-header"><span class="exercise-num">Ejercicio 2</span><h4>Agregar un test de sesgo por clase</h4></div>
+    <p>Agrega a <code>test_model.py</code> un test que verifique que ninguna clase tiene más del 60% de las predicciones (detección de modelo sesgado):</p>
+    <ol>
+      <li>Crea el método <code>test_no_class_dominates_predictions</code> en <code>TestSanityChecks</code></li>
+      <li>Calcula la frecuencia de cada clase en <code>y_pred</code></li>
+      <li>Aserta que ninguna clase supera el 60% de las predicciones totales</li>
+      <li>Verifica que el test pasa con el modelo actual</li>
+      <li>Modifica el modelo para que siempre prediga clase 0 y comprueba que el test falla</li>
+    </ol>
+  </div>
+
+  <div class="exercise">
+    <div class="exercise-header"><span class="exercise-num">Ejercicio 3</span><h4>Integrar los tests con el Drift Detector</h4></div>
+    <p>Modifica el <code>retrain_trigger.py</code> (Clase 01) para que ejecute el test-runner como quality gate antes de promover el challenger:</p>
+    <ol>
+      <li>En <code>retrain_trigger.py</code>, después de <code>_train_challenger()</code>, agrega una llamada a los model tests</li>
+      <li>Si los tests fallan, archivar el challenger en lugar de promoverlo</li>
+      <li>Registrar el resultado en MLFlow con tag <code>qa_gate_passed</code></li>
+      <li>Verificar el flujo completo: drift detectado → reentrenamiento → QA → promoción o archivo</li>
+    </ol>
+  </div>
+
+  <div class="exercise">
+    <div class="exercise-header"><span class="exercise-num">Ejercicio 4 · Investigación</span><h4>Implementar mutation testing</h4></div>
+    <p>El mutation testing verifica que tus tests son suficientemente robustos para detectar bugs. Usa <code>mutmut</code> para evaluar la calidad de la suite:</p>
+    <ol>
+      <li>Instala <code>mutmut</code> en el Dockerfile del test-runner</li>
+      <li>Ejecuta <code>mutmut run --paths-to-mutate=../model-trainer/train.py</code></li>
+      <li>Analiza qué mutaciones sobreviven (no son detectadas por los tests)</li>
+      <li>Agrega tests adicionales hasta que el mutation score supere el 80%</li>
+    </ol>
+  </div>
+</section>
+
+<section id="discusion">
+  <h2>Preguntas de discusión</h2>
+  <ol>
+    <li><strong>¿Por qué los API tests no usan mocks?</strong> En testing tradicional, los mocks son una práctica recomendada. ¿En qué casos un test con mock puede dar falsa confianza en un sistema MLOps?</li>
+    <li><strong>Los data tests corren sobre el dataset Iris estático.</strong> En un sistema real donde los datos vienen de un data lake que cambia constantemente, ¿cuándo y con qué frecuencia deberían correr los data tests?</li>
+    <li><strong>¿Cuál es el quality gate más importante?</strong> Si el equipo debe priorizar un solo test por restricciones de tiempo de CI/CD, ¿cuál elegirían y por qué?</li>
+    <li><strong>El test de latencia usa <code>time.perf_counter()</code>.</strong> ¿Qué factores pueden hacer que este test sea inestable en un entorno CI/CD compartido? ¿Cómo se mide latencia de forma más robusta en producción?</li>
+  </ol>
+</section>
+
+<section id="referencias">
+  <h2>Referencias</h2>
+  <ul>
+    <li>Eken, B. et al. (2025). <em>A Multivocal Review of MLOps Practices, Challenges and Open Issues</em>. ACM Computing Surveys, 58(2). — Sección 3.2.8 (Quality Assurance), PS62, PS24, PS89, PS90, PS100</li>
+    <li>Breck, E. et al. (2017). The ML Test Score: A Rubric for ML Production Readiness and Technical Debt Reduction. <em>IEEE Big Data</em>.</li>
+    <li>Kleppmann, M. (2017). <em>Designing Data-Intensive Applications</em>. O'Reilly. Cap. 1 (Reliability).</li>
+    <li>AWS Well-Architected ML Framework (PS111) — model validation best practices</li>
+  </ul>
+</section>
+
+</main>
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const navItems = document.querySelectorAll('.nav-item');
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navItems.forEach(n => n.classList.remove('active'));
+        const a = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+        if (a) a.classList.add('active');
+      }
+    });
+  }, {threshold: 0.3});
+  sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>
