@@ -60,7 +60,6 @@ services:
     networks:
       - mlops-net
 
-  # ── Clase 01: Drift Detector ────────────────────────────────────────────
   drift-detector:
     build: ./drift-detector
     container_name: drift-detector
@@ -81,7 +80,7 @@ services:
     networks:
       - mlops-net
 
-  # ── Clase 03: Test Runner ───────────────────────────────────────────────
+  # test-runner: sin profile, se invoca manualmente con docker compose run
   test-runner:
     build: ./tests
     container_name: test-runner
@@ -90,7 +89,6 @@ services:
       INFERENCE_API_URL:   http://inference-api:8000
       MODEL_NAME:          iris-classifier
       MODEL_STAGE:         Production
-      # Quality gates configurables
       GATE_MIN_ACCURACY:   "0.90"
       GATE_MIN_F1:         "0.90"
       GATE_MAX_LATENCY_MS: "500"
@@ -99,8 +97,6 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
-    profiles:
-      - testing     # solo se ejecuta con: docker compose --profile testing run test-runner
     networks:
       - mlops-net
 
