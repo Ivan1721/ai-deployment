@@ -80,13 +80,14 @@ services:
     networks:
       - mlops-net
 
-  # test-runner: sin profile, se invoca manualmente con docker compose run
+  # test-runner usa host.docker.internal para alcanzar servicios
+  # expuestos en los puertos del host (5001 y 8000)
   test-runner:
     build: ./tests
     container_name: test-runner
     environment:
-      MLFLOW_TRACKING_URI: http://mlflow:5001
-      INFERENCE_API_URL:   http://inference-api:8000
+      MLFLOW_TRACKING_URI: http://host.docker.internal:5001
+      INFERENCE_API_URL:   http://host.docker.internal:8000
       MODEL_NAME:          iris-classifier
       MODEL_STAGE:         Production
       GATE_MIN_ACCURACY:   "0.90"
@@ -94,9 +95,8 @@ services:
       GATE_MAX_LATENCY_MS: "500"
     volumes:
       - mlflow-data:/mlflow
-    depends_on:
-      mlflow:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - mlops-net
 
