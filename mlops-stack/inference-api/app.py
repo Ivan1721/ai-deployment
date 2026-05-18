@@ -110,6 +110,8 @@ def info():
 def predict(request: PredictRequest):
     if state["model"] is None:
         raise HTTPException(503, "Model not loaded yet.")
+    if len(request.instances) == 0:
+        raise HTTPException(422, "instances list must not be empty.")
     for i, row in enumerate(request.instances):
         if len(row) != 4:
             raise HTTPException(422, f"Instance {i}: expected 4 features, got {len(row)}.")
