@@ -138,3 +138,27 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def run_quality_gate(clf, X_test, y_test,
+                     min_accuracy: float = 0.90,
+                     min_f1: float = 0.90) -> bool:
+    """
+    Quality gate inline: evalúa el modelo antes de promoverlo.
+    Retorna True si pasa, False si debe bloquearse la promoción.
+    Fundamento: PS111, PS62 en Eken et al. (2025).
+    """
+    from sklearn.metrics import accuracy_score, f1_score
+    y_pred   = clf.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    f1       = f1_score(y_test, y_pred, average="weighted")
+
+    log.info(f"Quality Gate — accuracy={accuracy:.4f} (min={min_accuracy})  "
+             f"f1={f1:.4f} (min={min_f1})")
+
+    passed = accuracy >= min_accuracy and f1 >= min_f1
+    if not passed:
+        log.error("QUALITY GATE FAILED — model will NOT be promoted to Production")
+    else:
+        log.info("Quality Gate PASSED ✓")
+    return passed

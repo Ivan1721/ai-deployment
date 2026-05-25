@@ -1,3 +1,8 @@
+# CAMBIO vs versión anterior:
+# - Imágenes referencian REGISTRY_IMAGE/IMAGE_TAG para push/pull desde ghcr.io
+# - test-runner usa DNS interno (mlflow, inference-api) en CI
+# - entrypoint.sh detecta IP del gateway en desarrollo local
+
 networks:
   mlops-net:
     driver: bridge
@@ -8,6 +13,7 @@ volumes:
 services:
 
   mlflow:
+    image: ${REGISTRY_IMAGE:-mlops}/mlflow:${IMAGE_TAG:-latest}
     build: ./mlflow
     container_name: mlflow-server
     ports:
@@ -24,6 +30,7 @@ services:
       - mlops-net
 
   model-trainer:
+    image: ${REGISTRY_IMAGE:-mlops}/model-trainer:${IMAGE_TAG:-latest}
     build: ./model-trainer
     container_name: model-trainer
     environment:
@@ -38,6 +45,7 @@ services:
       - mlops-net
 
   inference-api:
+    image: ${REGISTRY_IMAGE:-mlops}/inference-api:${IMAGE_TAG:-latest}
     build: ./inference-api
     container_name: inference-api
     ports:
@@ -51,8 +59,6 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
-    # Health check permisivo: la API puede estar "degraded" (sin modelo aún)
-    # y seguir siendo válida como contenedor corriendo
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 10s
@@ -63,6 +69,7 @@ services:
       - mlops-net
 
   drift-detector:
+    image: ${REGISTRY_IMAGE:-mlops}/drift-detector:${IMAGE_TAG:-latest}
     build: ./drift-detector
     container_name: drift-detector
     environment:
@@ -76,7 +83,28 @@ services:
       CHECK_INTERVAL_S:          "30"
     volumes:
       - mlflow-data:/mlflow
-    # Solo depende de MLFlow — espera a la API por su cuenta en el código
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    networks:
+      - mlops-net
+
+  test-runner:
+    image: ${REGISTRY_IMAGE:-mlops}/test-runner:${IMAGE_TAG:-latest}
+    build: ./tests
+    container_name: test-runner
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      INFERENCE_API_URL:   http://inference-api:8000
+      MODEL_NAME:          iris-classifier
+      MODEL_STAGE:         Production
+      GATE_MIN_ACCURACY:   "0.90"
+      GATE_MIN_F1:         "0.90"
+      GATE_MAX_LATENCY_MS: "500"
+    volumes:
+      - mlflow-data:/mlflow
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       mlflow:
         condition: service_healthy
@@ -84,6 +112,7 @@ services:
       - mlops-net
 
   nginx:
+    image: ${REGISTRY_IMAGE:-mlops}/nginx:${IMAGE_TAG:-latest}
     build: ./nginx
     container_name: nginx-proxy
     ports:
