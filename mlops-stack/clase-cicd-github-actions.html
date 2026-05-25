@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CI/CD con GitHub Actions — MLOps Stack</title>
+<style>
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--card:#20232f;--border:#2e3347;
+  --accent:#6c8fff;--accent2:#4ecdc4;--warn:#ffd93d;--danger:#ff6b6b;
+  --success:#a8e6cf;--purple:#c39bd3;--text:#e8eaf0;--muted:#8891a8;
+  --code-bg:#0d0f18;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.7}
+.sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;z-index:100;padding:20px 0}
+.main{margin-left:240px;padding:40px 48px;max-width:860px}
+@media(max-width:860px){.sidebar{display:none}.main{margin-left:0;padding:24px}}
+.sidebar-logo{padding:0 18px 16px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.sidebar-logo div{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.sidebar-logo strong{font-size:.95rem}
+.nav-group{padding:10px 18px 4px;font-size:.68rem;text-transform:uppercase;letter-spacing:.8px;color:var(--border);margin-top:6px}
+.nav-item{display:block;padding:6px 18px;font-size:.82rem;color:var(--muted);text-decoration:none;border-left:2px solid transparent;transition:all .15s}
+.nav-item:hover,.nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(108,143,255,.05)}
+h1{font-size:1.9rem;font-weight:700;margin-bottom:6px}
+h2{font-size:1.25rem;font-weight:700;margin:44px 0 14px;padding-top:6px;border-top:1px solid var(--border);color:var(--accent)}
+h3{font-size:.95rem;font-weight:600;margin:24px 0 10px;color:var(--accent2)}
+p{font-size:.9rem;margin-bottom:12px}
+ul,ol{font-size:.9rem;margin:0 0 12px 18px}
+li{margin-bottom:5px}
+strong{color:var(--text)}
+code{font-family:'Cascadia Code','Fira Code',monospace}
+p code,li code,td code{background:var(--code-bg);border:1px solid var(--border);padding:1px 6px;border-radius:4px;font-size:.8rem;color:var(--accent2)}
+.page-header{padding-bottom:28px;border-bottom:1px solid var(--border);margin-bottom:36px}
+.breadcrumb{font-size:.78rem;color:var(--muted);margin-bottom:10px}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.badge{padding:3px 12px;border-radius:20px;font-size:.75rem;border:1px solid var(--border);color:var(--muted)}
+.badge.new{border-color:rgba(255,107,107,.4);color:var(--danger);background:rgba(255,107,107,.08)}
+.badge.ext{border-color:rgba(255,217,61,.4);color:var(--warn);background:rgba(255,217,61,.08)}
+.callout{padding:13px 16px;border-radius:6px;margin:14px 0;font-size:.86rem;border-left:3px solid}
+.callout-info{background:rgba(108,143,255,.07);border-color:var(--accent)}
+.callout-warn{background:rgba(255,217,61,.07);border-color:var(--warn)}
+.callout-success{background:rgba(168,230,207,.07);border-color:var(--success)}
+.callout-danger{background:rgba(255,107,107,.07);border-color:var(--danger)}
+.callout-title{font-weight:700;margin-bottom:4px;font-size:.78rem;text-transform:uppercase;letter-spacing:.5px}
+.callout-info .callout-title{color:var(--accent)}
+.callout-warn .callout-title{color:var(--warn)}
+.callout-success .callout-title{color:var(--success)}
+.callout-danger .callout-title{color:var(--danger)}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:18px;overflow-x:auto;margin:14px 0;position:relative}
+pre code{font-size:.8rem;color:var(--text);white-space:pre;display:block;line-height:1.8}
+.file-label{position:absolute;top:8px;right:12px;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.cm{color:var(--muted)} .ck{color:#ff79c6} .cv{color:var(--accent2)}
+.cs{color:var(--success)} .ch{color:var(--warn)} .cn{color:var(--accent)}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.84rem}
+th{background:var(--card);padding:9px 12px;text-align:left;color:var(--muted);font-weight:600;font-size:.73rem;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:9px 12px;border-bottom:1px solid rgba(46,51,71,.4);color:var(--muted);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td strong{color:var(--text)}
+.change-tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:.7rem;font-weight:700;margin-right:6px}
+.new-tag{background:rgba(255,107,107,.15);color:var(--danger);border:1px solid rgba(255,107,107,.3)}
+.mod-tag{background:rgba(255,217,61,.15);color:var(--warn);border:1px solid rgba(255,217,61,.3)}
+.same-tag{background:rgba(139,148,158,.1);color:var(--muted);border:1px solid var(--border)}
+.flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:20px 0}
+.flow-box{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 16px;font-size:.82rem;text-align:center;min-width:100px}
+.flow-arrow{color:var(--muted);font-size:1.1rem;padding:0 8px}
+.flow-box.trigger{border-color:var(--accent);color:var(--accent)}
+.flow-box.ci{border-color:var(--accent2);color:var(--accent2)}
+.flow-box.cd{border-color:var(--success);color:var(--success)}
+.flow-box.prod{border-color:var(--warn);color:var(--warn)}
+.flow-box.block{border-color:var(--danger);color:var(--danger)}
+.step-list{counter-reset:s;margin:16px 0}
+.step-item{display:flex;gap:12px;margin-bottom:14px;counter-increment:s}
+.step-item::before{content:counter(s);width:24px;height:24px;border-radius:50%;background:rgba(108,143,255,.15);border:1px solid var(--accent);color:var(--accent);font-size:.75rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.step-item p{margin:0;font-size:.87rem;color:var(--muted)}
+.step-item p strong{color:var(--text)}
+.secret-row{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid rgba(46,51,71,.4);font-size:.85rem}
+.secret-name{font-family:monospace;color:var(--accent2);min-width:160px}
+.secret-desc{color:var(--muted)}
+section{scroll-margin-top:20px}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div>MLOps Stack</div>
+    <strong>CI/CD con GitHub Actions</strong>
+  </div>
+  <div class="nav-group">Conceptos</div>
+  <a class="nav-item" href="#intro">¿Qué cambia?</a>
+  <a class="nav-item" href="#flujo">Flujo completo</a>
+  <a class="nav-item" href="#archivos">Archivos nuevos</a>
+  <div class="nav-group">Workflows</div>
+  <a class="nav-item" href="#ci">ci.yml — Integración</a>
+  <a class="nav-item" href="#cd">cd.yml — Entrega</a>
+  <a class="nav-item" href="#retrain">retrain.yml — CT</a>
+  <div class="nav-group">Configuración</div>
+  <a class="nav-item" href="#repo-setup">Repositorio GitHub</a>
+  <a class="nav-item" href="#server-setup">Servidor producción</a>
+  <a class="nav-item" href="#secrets">Secrets</a>
+  <a class="nav-item" href="#registry">Container Registry</a>
+  <div class="nav-group">Referencia</div>
+  <a class="nav-item" href="#cambios">Cambios detallados</a>
+  <a class="nav-item" href="#comandos">Comandos Git</a>
+</nav>
+
+<main class="main">
+
+<div class="page-header">
+  <div class="breadcrumb">MLOps Stack → CI/CD con GitHub Actions</div>
+  <h1>CI/CD con GitHub Actions</h1>
+  <p style="color:var(--muted);font-size:.92rem;margin-top:4px">Integración y entrega continua para el pipeline MLOps. Automatiza build, test y deploy en cada commit.</p>
+  <div class="badges">
+    <span class="badge new">3 archivos nuevos</span>
+    <span class="badge ext">1 archivo modificado</span>
+    <span class="badge" style="border-color:rgba(168,230,207,.3);color:var(--success);background:rgba(168,230,207,.08)">Todo lo anterior se conserva</span>
+  </div>
+</div>
+
+<!-- ── QUÉ CAMBIA ── -->
+<section id="intro">
+  <h2>¿Qué cambia respecto a la versión anterior?</h2>
+
+  <p>La versión anterior del stack requería intervención manual para construir imágenes, ejecutar tests y desplegar. Esta versión agrega automatización completa mediante GitHub Actions, manteniendo exactamente la misma lógica de todos los componentes.</p>
+
+  <table>
+    <tr><th>Archivo</th><th>Estado</th><th>Cambio</th></tr>
+    <tr><td><code>.github/workflows/ci.yml</code></td><td><span class="change-tag new-tag">NUEVO</span></td><td>Workflow de CI: build + tests en cada PR</td></tr>
+    <tr><td><code>.github/workflows/cd.yml</code></td><td><span class="change-tag new-tag">NUEVO</span></td><td>Workflow de CD: push a GHCR + deploy en producción</td></tr>
+    <tr><td><code>.github/workflows/retrain.yml</code></td><td><span class="change-tag new-tag">NUEVO</span></td><td>Reentrenamiento programado semanal + manual</td></tr>
+    <tr><td><code>setup_server.sh</code></td><td><span class="change-tag new-tag">NUEVO</span></td><td>Script de preparación del servidor de producción</td></tr>
+    <tr><td><code>.gitignore</code></td><td><span class="change-tag new-tag">NUEVO</span></td><td>Exclusiones para Python, MLFlow y Docker</td></tr>
+    <tr><td><code>docker-compose.yml</code></td><td><span class="change-tag mod-tag">MODIFICADO</span></td><td>Cada servicio ahora tiene campo <code>image:</code> con <code>REGISTRY_IMAGE</code> e <code>IMAGE_TAG</code></td></tr>
+    <tr><td><code>model-trainer/train.py</code></td><td><span class="change-tag same-tag">SIN CAMBIOS</span></td><td>Mismo código que la Clase 03</td></tr>
+    <tr><td><code>inference-api/app.py</code></td><td><span class="change-tag same-tag">SIN CAMBIOS</span></td><td>Con el fix de lista vacía → 422</td></tr>
+    <tr><td><code>tests/</code></td><td><span class="change-tag same-tag">SIN CAMBIOS</span></td><td>Misma suite de QA de la Clase 03</td></tr>
+    <tr><td><code>drift-detector/</code></td><td><span class="change-tag same-tag">SIN CAMBIOS</span></td><td>Mismo detector de la Clase 01</td></tr>
+  </table>
+</section>
+
+<!-- ── FLUJO ── -->
+<section id="flujo">
+  <h2>Flujo completo CI/CD</h2>
+
+  <h3>En un Pull Request</h3>
+  <div class="flow">
+    <div class="flow-box trigger">PR abierto<br><small>→ develop/main</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ci">Lint<br><small>flake8 + yamllint</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ci">Build<br><small>imágenes Docker</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ci">QA Suite<br><small>Niveles 1 + 2</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box cd">PR aprobado<br><small>o bloqueado ✗</small></div>
+  </div>
+
+  <h3>En merge a main</h3>
+  <div class="flow">
+    <div class="flow-box trigger">Push a main<br><small>merge aprobado</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ci">Build todas<br><small>las imágenes</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box cd">Push GHCR<br><small>sha-XXXXXXXX</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box prod">Deploy<br><small>servidor prod</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box cd">Post-deploy QA<br><small>suite completa</small></div>
+  </div>
+
+  <h3>Semanal (lunes 03:00 UTC)</h3>
+  <div class="flow">
+    <div class="flow-box trigger">Cron trigger<br><small>0 3 * * 1</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ci">Retrain<br><small>model-trainer</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ci">QA Gates<br><small>accuracy + F1</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box prod">Reload API<br><small>/reload endpoint</small></div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Relación con Clase 01 y Clase 03</div>
+    El workflow <strong>ci.yml</strong> usa exactamente el mismo <code>test-runner</code> de la Clase 03. El workflow <strong>retrain.yml</strong> complementa el <code>drift-detector</code> de la Clase 01 — el detector reacciona a cambios en los datos en tiempo real, el workflow programado garantiza reentrenamiento periódico aunque no haya drift severo.
+  </div>
+</section>
+
+<!-- ── ARCHIVOS NUEVOS ── -->
+<section id="archivos">
+  <h2>Estructura de archivos nuevos</h2>
+  <pre><code>mlops-stack/
+├── <span class="ch">.github/</span>                          ← NUEVO directorio
+│   └── <span class="ch">workflows/</span>
+│       ├── <span class="cs">ci.yml</span>                    ← NUEVO: CI en cada PR
+│       ├── <span class="cs">cd.yml</span>                    ← NUEVO: CD en merge a main
+│       └── <span class="cs">retrain.yml</span>              ← NUEVO: reentrenamiento programado
+│
+├── <span class="ch">setup_server.sh</span>                   ← NUEVO: prepara servidor prod
+├── <span class="ch">.gitignore</span>                        ← NUEVO
+│
+├── <span class="cv">docker-compose.yml</span>               ← MODIFICADO: agrega image: con REGISTRY_IMAGE
+│
+├── mlflow/                            sin cambios
+├── model-trainer/                     sin cambios
+├── inference-api/                     sin cambios (+ fix 422)
+├── drift-detector/                    sin cambios
+├── nginx/                             sin cambios
+└── tests/                             sin cambios</code></pre>
+</section>
+
+<!-- ── CI WORKFLOW ── -->
+<section id="ci">
+  <h2>ci.yml — Workflow de Integración Continua</h2>
+  <p><strong>Cuándo corre:</strong> en cada Pull Request hacia <code>main</code> o <code>develop</code>, y en push directo a <code>develop</code>.</p>
+  <p><strong>Qué hace:</strong> garantiza que el código es correcto antes de hacer merge. Si falla, el PR queda bloqueado.</p>
+
+  <h3>Job 1: lint</h3>
+  <pre><code><span class="file-label">ci.yml</span><span class="ck">- name:</span> <span class="cv">Lint Python (flake8)</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">flake8 model-trainer/train.py inference-api/app.py ...</span>
+      <span class="ch">--max-line-length=110</span>
+  <span class="ck">continue-on-error:</span> <span class="cv">true</span>   <span class="cm"># reporta pero no bloquea por estilo</span></code></pre>
+
+  <h3>Job 2: build (con cache en GHCR)</h3>
+  <pre><code><span class="file-label">ci.yml</span><span class="ck">- name:</span> <span class="cv">Build inference-api</span>
+  <span class="ck">uses:</span> <span class="cv">docker/build-push-action@v5</span>
+  <span class="ck">with:</span>
+    <span class="ck">context:</span>    <span class="cv">./inference-api</span>
+    <span class="ck">push:</span>       <span class="cv">false</span>    <span class="cm"># en CI no publicamos, solo compilamos</span>
+    <span class="ck">cache-from:</span> <span class="cv">type=registry,ref=ghcr.io/ORG/inference-api:cache</span>
+    <span class="ck">cache-to:</span>   <span class="cv">type=registry,ref=ghcr.io/ORG/inference-api:cache,mode=max</span></code></pre>
+
+  <p>El cache en GHCR hace que los builds subsecuentes sean mucho más rápidos — solo se reconstruyen las capas que cambiaron.</p>
+
+  <h3>Job 3: test (QA suite)</h3>
+  <pre><code><span class="file-label">ci.yml</span><span class="cm"># Levantar MLFlow + entrenar + correr test-runner</span>
+<span class="ck">- name:</span> <span class="cv">Run QA suite</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose run --rm \</span>
+      <span class="ch">-e MLFLOW_TRACKING_URI=http://mlflow:5001 \</span>
+      <span class="ch">-e INFERENCE_API_URL=http://inference-api:8000 \</span>
+      <span class="cs">test-runner</span>
+<span class="cm"># exit code 1 → quality gate falló → CI falla → PR bloqueado</span></code></pre>
+
+  <div class="callout callout-success">
+    <div class="callout-title">En CI, el DNS interno funciona</div>
+    En el runner de GitHub Actions todos los contenedores están en la misma red Docker, así que <code>mlflow</code> e <code>inference-api</code> se resuelven por nombre sin el workaround de <code>host-gateway</code>. El <code>extra_hosts</code> del docker-compose solo actúa en desarrollo local.
+  </div>
+</section>
+
+<!-- ── CD WORKFLOW ── -->
+<section id="cd">
+  <h2>cd.yml — Workflow de Entrega Continua</h2>
+  <p><strong>Cuándo corre:</strong> solo en push a <code>main</code> (merge de PR aprobado y con CI verde).</p>
+  <p><strong>Qué hace:</strong> construye y publica todas las imágenes en GHCR, luego despliega en el servidor de producción vía SSH.</p>
+
+  <h3>Tag de imagen = SHA del commit</h3>
+  <pre><code><span class="file-label">cd.yml</span><span class="ck">- name:</span> <span class="cv">Generate image tag</span>
+  <span class="ck">id:</span> <span class="cv">tag</span>
+  <span class="ck">run:</span> <span class="cv">echo "tag=sha-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT</span>
+
+<span class="cm"># Cada imagen se publica con dos tags:</span>
+<span class="cm">#   sha-a1b2c3d4  → inmutable, trazable al commit exacto</span>
+<span class="cm">#   latest        → conveniente para docker compose pull</span>
+<span class="ck">tags:</span> <span class="cv">|</span>
+  <span class="cs">ghcr.io/ORG/inference-api:sha-a1b2c3d4</span>
+  <span class="cs">ghcr.io/ORG/inference-api:latest</span></code></pre>
+
+  <h3>Deploy en el servidor (rolling update)</h3>
+  <pre><code><span class="file-label">cd.yml — SSH al servidor</span><span class="cm"># Actualizar inference-api primero (zero-downtime)</span>
+<span class="cs">docker compose up -d --no-deps inference-api</span>
+<span class="cs">sleep 10</span>
+<span class="cs">curl -sf http://localhost:8000/health ||</span> \
+  <span class="ch">(echo "unhealthy after update" && exit 1)</span>
+
+<span class="cm"># Actualizar resto de servicios</span>
+<span class="cs">docker compose up -d --no-deps mlflow drift-detector nginx</span>
+
+<span class="cm"># Post-deploy: correr suite QA completa</span>
+<span class="cs">docker compose run --rm test-runner</span></code></pre>
+
+  <h3>Environment de producción (aprobación manual opcional)</h3>
+  <pre><code><span class="file-label">cd.yml</span><span class="ck">deploy:</span>
+  <span class="ck">environment:</span> <span class="cv">production</span>
+  <span class="cm"># Si configuras "Required reviewers" en el environment "production"</span>
+  <span class="cm"># en GitHub → Settings → Environments, cada deploy requerirá</span>
+  <span class="cm"># aprobación manual de un reviewer antes de ejecutarse.</span></code></pre>
+</section>
+
+<!-- ── RETRAIN WORKFLOW ── -->
+<section id="retrain">
+  <h2>retrain.yml — Reentrenamiento Programado</h2>
+  <p><strong>Cuándo corre:</strong> todos los lunes a las 03:00 UTC, o manualmente desde la UI de GitHub Actions.</p>
+
+  <h3>Disparo manual con parámetros</h3>
+  <pre><code><span class="file-label">retrain.yml</span><span class="ck">workflow_dispatch:</span>
+  <span class="ck">inputs:</span>
+    <span class="ck">min_accuracy:</span>
+      <span class="ck">description:</span> <span class="cv">"Accuracy mínima del quality gate"</span>
+      <span class="ck">default:</span>     <span class="cv">"0.90"</span>
+    <span class="ck">force_promote:</span>
+      <span class="ck">description:</span> <span class="cv">"Promover aunque no supere al champion"</span>
+      <span class="ck">default:</span>     <span class="cv">"false"</span></code></pre>
+
+  <p>Para dispararlo manualmente: <strong>GitHub → Actions → Scheduled Retrain → Run workflow</strong>.</p>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">Complemento al drift-detector (Clase 01)</div>
+    El <code>drift-detector</code> reacciona a cambios estadísticos en los datos en tiempo real. El <code>retrain.yml</code> garantiza reentrenamiento periódico aunque el drift no sea severo — por ejemplo, al cambiar los hiperparámetros del modelo o actualizar dependencias.
+  </div>
+</section>
+
+<!-- ── REPO SETUP ── -->
+<section id="repo-setup">
+  <h2>Paso 1: Configurar el repositorio GitHub</h2>
+
+  <div class="step-list">
+    <div class="step-item"><p><strong>Crear repositorio</strong> en GitHub (público o privado). El Container Registry (GHCR) funciona con ambos.</p></div>
+    <div class="step-item"><p><strong>Subir el código</strong>:<br>
+    <code>git init && git add . && git commit -m "initial: mlops stack with ci/cd"</code><br>
+    <code>git remote add origin https://github.com/TU_ORG/TU_REPO.git</code><br>
+    <code>git push -u origin main</code></p></div>
+    <div class="step-item"><p><strong>Habilitar GHCR</strong> para el repositorio: GitHub → Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests" ✓</p></div>
+    <div class="step-item"><p><strong>Crear rama develop</strong>: <code>git checkout -b develop && git push -u origin develop</code>. Los PRs van de feature branches → develop → main.</p></div>
+    <div class="step-item"><p><strong>Proteger la rama main</strong>: GitHub → Settings → Branches → Add rule → require status checks (CI workflow) before merging.</p></div>
+  </div>
+</section>
+
+<!-- ── SERVER SETUP ── -->
+<section id="server-setup">
+  <h2>Paso 2: Preparar el servidor de producción</h2>
+
+  <p>El servidor puede ser cualquier VPS con Ubuntu 22.04+ (AWS EC2, DigitalOcean, etc.) con al menos 2 CPU y 4GB RAM.</p>
+
+  <div class="step-list">
+    <div class="step-item"><p><strong>Ejecutar el script de setup</strong> en el servidor:<br>
+    <code>bash setup_server.sh</code><br>
+    Instala Docker, Docker Compose, crea el directorio de deploy y el servicio systemd.</p></div>
+    <div class="step-item"><p><strong>Generar clave SSH para GitHub Actions</strong> (en tu máquina local):<br>
+    <code>ssh-keygen -t ed25519 -C "github-actions" -f ~/.ssh/mlops_deploy -N ""</code></p></div>
+    <div class="step-item"><p><strong>Agregar la clave pública al servidor</strong>:<br>
+    <code>cat ~/.ssh/mlops_deploy.pub | ssh usuario@servidor "cat >> ~/.ssh/authorized_keys"</code></p></div>
+    <div class="step-item"><p><strong>Editar el archivo .env</strong> en el servidor (<code>/opt/mlops-stack/.env</code>):<br>
+    <code>REGISTRY_IMAGE=ghcr.io/TU_ORG</code><br>
+    <code>IMAGE_TAG=latest</code></p></div>
+    <div class="step-item"><p><strong>Primer deploy manual</strong> para verificar:<br>
+    <code>cd /opt/mlops-stack && docker compose up -d</code></p></div>
+  </div>
+</section>
+
+<!-- ── SECRETS ── -->
+<section id="secrets">
+  <h2>Paso 3: Configurar Secrets en GitHub</h2>
+
+  <p>GitHub → Settings → Secrets and variables → Actions → New repository secret:</p>
+
+  <div class="secret-row"><span class="secret-name">PROD_HOST</span><span class="secret-desc">IP o hostname del servidor. Ej: <code>203.0.113.10</code></span></div>
+  <div class="secret-row"><span class="secret-name">PROD_USER</span><span class="secret-desc">Usuario SSH del servidor. Ej: <code>ubuntu</code> o <code>deploy</code></span></div>
+  <div class="secret-row"><span class="secret-name">PROD_SSH_KEY</span><span class="secret-desc">Contenido completo del archivo <code>~/.ssh/mlops_deploy</code> (clave privada)</span></div>
+  <div class="secret-row"><span class="secret-name">PROD_DEPLOY_PATH</span><span class="secret-desc">Ruta del directorio en el servidor. Ej: <code>/opt/mlops-stack</code></span></div>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">⚠ GITHUB_TOKEN es automático</div>
+    El secret <code>GITHUB_TOKEN</code> lo provee GitHub Actions automáticamente — no necesitas crearlo. Se usa para autenticarse en GHCR y para publicar artefactos del workflow.
+  </div>
+
+  <h3>Configurar el environment de producción (aprobación manual)</h3>
+  <p>Para requerir aprobación humana antes de cada deploy: GitHub → Settings → Environments → New environment → <code>production</code> → Required reviewers → agregar tu usuario.</p>
+</section>
+
+<!-- ── REGISTRY ── -->
+<section id="registry">
+  <h2>GitHub Container Registry (GHCR)</h2>
+
+  <p>Las imágenes se publican automáticamente en <code>ghcr.io/TU_ORG/</code>. Para verlas: GitHub → Packages.</p>
+
+  <h3>Visibilidad de paquetes</h3>
+  <p>Por defecto los paquetes son privados. Para hacerlos públicos (necesario si el servidor hace pull sin autenticación):<br>
+  GitHub → Packages → <em>nombre-imagen</em> → Package settings → Change visibility → Public.</p>
+
+  <h3>Pull manual desde el servidor</h3>
+  <pre><code><span class="cm"># Autenticarse (si las imágenes son privadas)</span>
+<span class="cs">echo TOKEN | docker login ghcr.io -u USUARIO --password-stdin</span>
+
+<span class="cm"># Verificar que las imágenes están disponibles</span>
+<span class="cs">docker pull ghcr.io/TU_ORG/inference-api:latest</span></code></pre>
+</section>
+
+<!-- ── CAMBIOS DETALLADOS ── -->
+<section id="cambios">
+  <h2>Cambios detallados en docker-compose.yml</h2>
+
+  <p>El único cambio funcional al archivo existente es agregar el campo <code>image:</code> a cada servicio. Antes:</p>
+  <pre><code><span class="file-label">ANTES (docker-compose.yml)</span><span class="ck">inference-api:</span>
+  <span class="ck">build:</span> <span class="cv">./inference-api</span>
+  <span class="ck">container_name:</span> <span class="cv">inference-api</span>
+  ...</code></pre>
+
+  <p>Después:</p>
+  <pre><code><span class="file-label">DESPUÉS — campo image: agregado</span><span class="ck">inference-api:</span>
+  <span class="ch">image: ${REGISTRY_IMAGE:-mlops}/inference-api:${IMAGE_TAG:-latest}</span>
+  <span class="ck">build:</span> <span class="cv">./inference-api</span>   <span class="cm"># build sigue funcionando localmente</span>
+  <span class="ck">container_name:</span> <span class="cv">inference-api</span>
+  ...</code></pre>
+
+  <p>Con <code>image:</code> presente, Docker Compose puede hacer <code>pull</code> de la imagen publicada en GHCR en lugar de construirla localmente. En desarrollo local, si <code>REGISTRY_IMAGE</code> no está definida, usa el fallback <code>mlops/inference-api:latest</code> y sigue construyendo normalmente con <code>docker compose build</code>.</p>
+</section>
+
+<!-- ── COMANDOS GIT ── -->
+<section id="comandos">
+  <h2>Flujo de trabajo diario con Git</h2>
+
+  <pre><code><span class="cm"># 1. Crear rama para nueva funcionalidad</span>
+<span class="cs">git checkout -b feature/nueva-feature</span>
+
+<span class="cm"># 2. Hacer cambios y commit</span>
+<span class="cs">git add .</span>
+<span class="cs">git commit -m "feat: descripción del cambio"</span>
+
+<span class="cm"># 3. Push y abrir PR hacia develop</span>
+<span class="cs">git push origin feature/nueva-feature</span>
+<span class="cm"># → GitHub Actions dispara ci.yml automáticamente</span>
+<span class="cm"># → Si CI pasa: PR puede aprobarse y mergearse</span>
+<span class="cm"># → Si CI falla: PR queda bloqueado hasta corregir</span>
+
+<span class="cm"># 4. Merge develop → main (cuando se quiere ir a producción)</span>
+<span class="cm"># → GitHub Actions dispara cd.yml automáticamente</span>
+<span class="cm"># → Build + push de imágenes a GHCR</span>
+<span class="cm"># → Deploy al servidor vía SSH</span>
+<span class="cm"># → Post-deploy QA suite</span>
+
+<span class="cm"># 5. Reentrenamiento manual bajo demanda</span>
+<span class="cm"># → GitHub → Actions → Scheduled Retrain → Run workflow</span></code></pre>
+
+  <div class="callout callout-success">
+    <div class="callout-title">✓ Convención de commits recomendada</div>
+    <code>feat:</code> nueva funcionalidad · <code>fix:</code> corrección · <code>test:</code> tests · <code>ci:</code> cambios en workflows · <code>docs:</code> documentación · <code>refactor:</code> refactoring sin cambio de comportamiento
+  </div>
+</section>
+
+</main>
+
+<script>
+const sections = document.querySelectorAll('section[id]');
+const navItems = document.querySelectorAll('.nav-item[href]');
+const obs = new IntersectionObserver(e => {
+  e.forEach(entry => {
+    if (entry.isIntersecting) {
+      navItems.forEach(n => n.classList.remove('active'));
+      const a = document.querySelector(`.nav-item[href="#${entry.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, {threshold: 0.35});
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

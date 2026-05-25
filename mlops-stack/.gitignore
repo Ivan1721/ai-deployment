@@ -1,0 +1,32 @@
+# NUEVO ARCHIVO — no existía en la versión anterior.
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# MLFlow local
+mlruns/
+mlartifacts/
+
+# Docker
+.dockerignore
+
+# Entorno
+.env
+.env.local
+*.env
+
+# Reportes de tests
+*.json
+!package.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
