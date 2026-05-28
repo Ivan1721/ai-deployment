@@ -1,23 +1,15 @@
 # .github/workflows/retrain.yml
 #
-# NUEVO ARCHIVO — no existía en la versión anterior.
-#
-# Workflow de Reentrenamiento Programado (Scheduled CT).
-# Complementa el reentrenamiento automático del drift-detector (Clase 01)
-# con un ciclo programado semanal que garantiza que el modelo se actualice
-# aunque el drift no sea lo suficientemente severo para disparar el trigger.
-#
-# También puede dispararse manualmente desde la UI de GitHub Actions
-# (workflow_dispatch) con parámetros configurables.
+# CAMBIO vs versión anterior:
+# - runs-on: self-hosted
+# - Acceso directo al stack local (sin SSH)
+# - Tras reentrenar, recarga el modelo en la API con POST /reload
 
 name: Scheduled Retrain
 
 on:
-  # Todos los lunes a las 03:00 UTC
   schedule:
-    - cron: "0 3 * * 1"
-
-  # Disparo manual desde GitHub Actions UI
+    - cron: "0 3 * * 1"   # lunes 03:00 UTC
   workflow_dispatch:
     inputs:
       min_accuracy:
@@ -25,87 +17,60 @@ on:
         required: false
         default: "0.90"
       min_f1:
-        description: "F1-score mínimo del quality gate"
+        description: "F1-score mínimo"
         required: false
         default: "0.90"
-      force_promote:
-        description: "Promover aunque no supere al champion (true/false)"
-        required: false
-        default: "false"
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+  DEPLOY_DIR: /opt/mlops-stack
+  COMPOSE_PROJECT: mlops
 
 jobs:
 
   retrain:
-    name: Retrain & Validate Model
-    runs-on: ubuntu-latest
+    name: Retrain Model
+    runs-on: self-hosted
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set parameters
-        id: params
+      - name: Verify stack is running
         run: |
-          echo "min_accuracy=${{ github.event.inputs.min_accuracy || '0.90' }}" >> $GITHUB_OUTPUT
-          echo "min_f1=${{ github.event.inputs.min_f1 || '0.90' }}"             >> $GITHUB_OUTPUT
-          echo "force_promote=${{ github.event.inputs.force_promote || 'false' }}" >> $GITHUB_OUTPUT
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull latest images
-        run: |
-          docker compose pull mlflow model-trainer test-runner || \
-            docker compose build mlflow model-trainer test-runner
-
-      - name: Start MLFlow
-        run: |
-          docker compose up -d mlflow
-          timeout 120 bash -c \
-            'until docker compose ps mlflow | grep -q "healthy"; do sleep 3; done'
-          echo "MLFlow ready ✓"
+          docker compose -p ${{ env.COMPOSE_PROJECT }} \
+            -f ${{ env.DEPLOY_DIR }}/docker-compose.yml \
+            ps mlflow | grep -q "(healthy)" \
+            || (echo "MLFlow not running — start the stack first" && exit 1)
+          echo "Stack is running ✓"
 
       - name: Retrain model
+        working-directory: ${{ env.DEPLOY_DIR }}
         run: |
-          docker compose run --rm \
-            -e GATE_MIN_ACCURACY=${{ steps.params.outputs.min_accuracy }} \
-            -e GATE_MIN_F1=${{ steps.params.outputs.min_f1 }} \
+          docker compose -p ${{ env.COMPOSE_PROJECT }} run --rm \
+            -e MLFLOW_TRACKING_URI=http://mlflow:5001 \
             model-trainer
 
-      - name: Run QA suite on new model
+      - name: Run QA on new model
+        working-directory: ${{ env.DEPLOY_DIR }}
         run: |
-          docker compose run --rm \
+          docker compose -p ${{ env.COMPOSE_PROJECT }} run --rm \
             -e MLFLOW_TRACKING_URI=http://mlflow:5001 \
-            -e GATE_MIN_ACCURACY=${{ steps.params.outputs.min_accuracy }} \
-            -e GATE_MIN_F1=${{ steps.params.outputs.min_f1 }} \
+            -e INFERENCE_API_URL=http://inference-api:8000 \
+            -e GATE_MIN_ACCURACY=${{ github.event.inputs.min_accuracy || '0.90' }} \
+            -e GATE_MIN_F1=${{ github.event.inputs.min_f1 || '0.90' }} \
             test-runner
 
-      - name: Deploy updated model to production
+      # Recargar el modelo en la API sin reiniciar el contenedor
+      - name: Hot-reload model in inference-api
         if: success()
-        env:
-          IMAGE_TAG: latest
-          REGISTRY_IMAGE: ${{ env.IMAGE_PREFIX }}
         run: |
-          ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-          # Si hay acceso SSH, recargar el modelo en producción
-          # Si no, el drift-detector lo actualizará en el próximo ciclo
+          curl -sf -X POST http://localhost:8000/reload \
+            && echo "Model reloaded in inference-api ✓" \
+            || echo "Reload failed — inference-api may need restart"
 
       - name: Summary
         if: always()
         run: |
           echo "## Retrain Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Triggered: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Min accuracy: ${{ steps.params.outputs.min_accuracy }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Min F1: ${{ steps.params.outputs.min_f1 }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-
-      - name: Cleanup
-        if: always()
-        run: docker compose down -v
+          echo "- **Triggered:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Min accuracy:** ${{ github.event.inputs.min_accuracy || '0.90' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
