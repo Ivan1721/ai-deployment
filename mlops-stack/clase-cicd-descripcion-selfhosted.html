@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clase CI/CD — GitHub Actions Self-Hosted · MLOps Stack</title>
+<style>
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--card:#20232f;--border:#2e3347;
+  --accent:#6c8fff;--accent2:#4ecdc4;--warn:#ffd93d;--danger:#ff6b6b;
+  --success:#a8e6cf;--purple:#c39bd3;--text:#e8eaf0;--muted:#8891a8;
+  --code-bg:#0a0c14;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.75}
+.sidebar{position:fixed;top:0;left:0;width:252px;height:100vh;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;z-index:100;padding:20px 0}
+.main{margin-left:252px;padding:44px 52px;max-width:920px}
+@media(max-width:900px){.sidebar{display:none}.main{margin-left:0;padding:24px}}
+.sidebar-logo{padding:0 18px 16px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.sidebar-logo small{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:3px}
+.sidebar-logo strong{font-size:.92rem;color:var(--text)}
+.nav-group{padding:10px 18px 4px;font-size:.67rem;text-transform:uppercase;letter-spacing:.9px;color:var(--border);margin-top:8px}
+.nav-item{display:block;padding:6px 18px;font-size:.81rem;color:var(--muted);text-decoration:none;border-left:2px solid transparent;transition:all .15s}
+.nav-item:hover,.nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(108,143,255,.05)}
+/* typography */
+h1{font-size:2rem;font-weight:700;margin-bottom:6px;letter-spacing:-.5px}
+h2{font-size:1.25rem;font-weight:700;margin:48px 0 16px;padding-top:8px;border-top:1px solid var(--border);color:var(--accent)}
+h3{font-size:.98rem;font-weight:600;margin:28px 0 10px;color:var(--accent2)}
+h4{font-size:.88rem;font-weight:600;margin:20px 0 8px;color:var(--warn)}
+p{font-size:.91rem;margin-bottom:13px;color:var(--text)}
+ul,ol{font-size:.91rem;margin:0 0 13px 20px}
+li{margin-bottom:5px;color:var(--muted)}
+li strong{color:var(--text)}
+strong{color:var(--text)}
+a{color:var(--accent)}
+code{font-family:'Cascadia Code','Fira Code',monospace}
+p code,li code,td code{background:var(--code-bg);border:1px solid var(--border);padding:1px 6px;border-radius:4px;font-size:.79rem;color:var(--accent2)}
+/* header */
+.page-header{padding-bottom:28px;border-bottom:1px solid var(--border);margin-bottom:40px}
+.breadcrumb{font-size:.77rem;color:var(--muted);margin-bottom:10px}
+.subtitle{color:var(--muted);font-size:.92rem;margin-top:4px;line-height:1.5}
+.meta-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.meta-badge{padding:4px 13px;border-radius:20px;font-size:.75rem;border:1px solid;color:var(--muted)}
+.mb-blue{border-color:rgba(108,143,255,.4);color:var(--accent);background:rgba(108,143,255,.08)}
+.mb-green{border-color:rgba(168,230,207,.4);color:var(--success);background:rgba(168,230,207,.08)}
+.mb-yellow{border-color:rgba(255,217,61,.4);color:var(--warn);background:rgba(255,217,61,.08)}
+/* callouts */
+.callout{padding:14px 18px;border-radius:7px;margin:16px 0;font-size:.87rem;border-left:3px solid;line-height:1.6}
+.ci{background:rgba(108,143,255,.07);border-color:var(--accent)}
+.cw{background:rgba(255,217,61,.07);border-color:var(--warn)}
+.cs{background:rgba(168,230,207,.07);border-color:var(--success)}
+.cd{background:rgba(255,107,107,.07);border-color:var(--danger)}
+.ct{font-weight:700;margin-bottom:5px;font-size:.77rem;text-transform:uppercase;letter-spacing:.5px}
+.ci .ct{color:var(--accent)}.cw .ct{color:var(--warn)}.cs .ct{color:var(--success)}.cd .ct{color:var(--danger)}
+/* code blocks */
+.cb{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;margin:16px 0;overflow:hidden;position:relative}
+.cb-head{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;background:rgba(255,255,255,.025);border-bottom:1px solid var(--border)}
+.cb-label{font-size:.69rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:monospace}
+.cb-tag{font-size:.68rem;padding:2px 9px;border-radius:3px;font-weight:600}
+.tag-new{background:rgba(255,107,107,.15);color:var(--danger);border:1px solid rgba(255,107,107,.3)}
+.tag-mod{background:rgba(255,217,61,.15);color:var(--warn);border:1px solid rgba(255,217,61,.3)}
+.tag-same{background:rgba(139,148,158,.1);color:var(--muted);border:1px solid var(--border)}
+.cb-body{padding:18px 20px;overflow-x:auto}
+.cb-body code{font-size:.8rem;color:var(--text);white-space:pre;display:block;line-height:1.85}
+/* syntax highlight classes */
+.cm{color:var(--muted)} /* comment */
+.ck{color:#ff79c6}      /* key */
+.cv{color:var(--accent2)} /* value */
+.cs{color:var(--success)} /* string/command */
+.ch{color:var(--warn)}  /* highlight */
+.cn{color:var(--accent)} /* name */
+.cr{color:var(--danger)} /* removed */
+/* annotation boxes inline in code */
+.ann{display:inline-block;margin-left:8px;padding:0 7px;border-radius:3px;font-size:.7rem;font-family:sans-serif;vertical-align:middle;background:rgba(108,143,255,.18);color:var(--accent);border:1px solid rgba(108,143,255,.3)}
+.ann-w{background:rgba(255,217,61,.15);color:var(--warn);border-color:rgba(255,217,61,.3)}
+.ann-g{background:rgba(168,230,207,.12);color:var(--success);border-color:rgba(168,230,207,.3)}
+/* stage cards */
+.stage{background:var(--card);border:1px solid var(--border);border-radius:10px;margin:20px 0;overflow:hidden}
+.stage-header{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border)}
+.stage-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;flex-shrink:0}
+.stage-title{font-weight:600;font-size:1rem}
+.stage-sub{font-size:.8rem;color:var(--muted);margin-top:2px}
+.stage-body{padding:18px 20px}
+/* flow diagram */
+.flow{display:flex;align-items:center;flex-wrap:wrap;gap:0;margin:16px 0}
+.fb{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:9px 14px;font-size:.79rem;text-align:center;min-width:88px;line-height:1.4}
+.fa{color:var(--muted);padding:0 6px;font-size:1rem}
+.fb.tr{border-color:var(--accent);color:var(--accent)}
+.fb.ci{border-color:var(--accent2);color:var(--accent2)}
+.fb.cd{border-color:var(--success);color:var(--success)}
+.fb.lc{border-color:var(--warn);color:var(--warn)}
+.fb.bl{border-color:var(--danger);color:var(--danger)}
+/* table */
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.84rem}
+th{background:var(--card);padding:9px 13px;text-align:left;color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:9px 13px;border-bottom:1px solid rgba(46,51,71,.4);color:var(--muted);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td strong{color:var(--text)}
+/* divider */
+.divider{height:1px;background:var(--border);margin:44px 0}
+section{scroll-margin-top:24px}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <small>MLOps Stack · CI/CD</small>
+    <strong>GitHub Actions Self-Hosted</strong>
+  </div>
+  <div class="nav-group">Introducción</div>
+  <a class="nav-item" href="#objetivos">Objetivos</a>
+  <a class="nav-item" href="#concepto">Concepto clave</a>
+  <a class="nav-item" href="#arquitectura">Arquitectura</a>
+  <div class="nav-group">Docker Compose</div>
+  <a class="nav-item" href="#compose-red">Red y volumen</a>
+  <a class="nav-item" href="#compose-servicios">Servicios permanentes</a>
+  <a class="nav-item" href="#compose-efimeros">Servicios efímeros</a>
+  <a class="nav-item" href="#compose-restart">restart: unless-stopped</a>
+  <div class="nav-group">Workflow CI</div>
+  <a class="nav-item" href="#ci-trigger">Trigger y runs-on</a>
+  <a class="nav-item" href="#ci-lint">Job: lint</a>
+  <a class="nav-item" href="#ci-build">Step: build images</a>
+  <a class="nav-item" href="#ci-mlflow">Step: start MLFlow</a>
+  <a class="nav-item" href="#ci-train">Step: train model</a>
+  <a class="nav-item" href="#ci-api">Step: start API</a>
+  <a class="nav-item" href="#ci-qa">Step: QA suite</a>
+  <a class="nav-item" href="#ci-cleanup">Step: cleanup</a>
+  <div class="nav-group">Workflow CD</div>
+  <a class="nav-item" href="#cd-trigger">Trigger y concurrency</a>
+  <a class="nav-item" href="#cd-rsync">Step: rsync</a>
+  <a class="nav-item" href="#cd-build">Step: build</a>
+  <a class="nav-item" href="#cd-mlflow">Step: ensure MLFlow</a>
+  <a class="nav-item" href="#cd-train">Step: train if needed</a>
+  <a class="nav-item" href="#cd-rolling">Step: rolling update</a>
+  <a class="nav-item" href="#cd-postqa">Step: post-deploy QA</a>
+  <a class="nav-item" href="#cd-summary">Step: summary</a>
+  <div class="nav-group">Workflow Retrain</div>
+  <a class="nav-item" href="#retrain-trigger">Trigger schedule</a>
+  <a class="nav-item" href="#retrain-steps">Steps</a>
+  <div class="nav-group">Fundamento</div>
+  <a class="nav-item" href="#fundamento">Eken et al. (2025)</a>
+  <a class="nav-item" href="#ejercicios">Ejercicios</a>
+</nav>
+
+<main class="main">
+
+<!-- ── HEADER ── -->
+<div class="page-header">
+  <div class="breadcrumb">MLOps Stack · Tutorial Base → Clase 01 → Clase 03 → CI/CD</div>
+  <h1>CI/CD con GitHub Actions<br>Self-Hosted Runner</h1>
+  <p class="subtitle">Automatización completa del pipeline MLOps: build, test y deploy corren en la misma máquina donde vive el stack, sin infraestructura externa ni credenciales de red.</p>
+  <div class="meta-row">
+    <span class="meta-badge mb-blue">Pipeline & Automatización</span>
+    <span class="meta-badge mb-yellow">Avanzado · 4–5 h</span>
+    <span class="meta-badge mb-green">3 workflows · 1 script de setup</span>
+  </div>
+</div>
+
+<!-- ══════════ OBJETIVOS ══════════ -->
+<section id="objetivos">
+  <h2>Objetivos de aprendizaje</h2>
+  <ul>
+    <li>Comprender qué es un <strong>self-hosted runner</strong> y por qué elimina la complejidad de red frente a un runner en la nube.</li>
+    <li>Explicar la diferencia entre <strong>CI</strong> (Integración Continua) y <strong>CD</strong> (Entrega Continua) y sus responsabilidades en MLOps.</li>
+    <li>Construir un <code>docker-compose.yml</code> que distinga servicios <em>permanentes</em> (con <code>restart</code>) de servicios <em>efímeros</em> (jobs de CI/CD).</li>
+    <li>Diseñar un workflow de CI que bloquee un PR si el modelo no supera los quality gates de la Clase 03.</li>
+    <li>Diseñar un workflow de CD con <strong>rolling update</strong> (zero-downtime) y verificación post-deploy.</li>
+    <li>Conectar el reentrenamiento programado con el modelo existente en MLFlow, reutilizando el ciclo de la Clase 01.</li>
+    <li>Identificar qué decisiones de diseño son específicas de MLOps vs. las que vienen del DevOps tradicional.</li>
+  </ul>
+</section>
+
+<!-- ══════════ CONCEPTO ══════════ -->
+<section id="concepto">
+  <h2>Concepto clave: ¿por qué self-hosted?</h2>
+
+  <p>Un pipeline CI/CD convencional usa runners en la <em>nube</em> del proveedor (en GitHub, <code>runs-on: ubuntu-latest</code>). Ese runner recibe el código, corre los jobs, y cuando necesita desplegar, hace SSH a un servidor remoto. Para un stack MLOps esto introduce varios problemas:</p>
+
+  <ul>
+    <li>El test-runner necesita llegar a MLFlow y a la Inference API — que están en otra máquina — para correr los quality gates. Esto requiere exponer puertos, configurar IPs, manejar credenciales.</li>
+    <li>Las imágenes Docker se construyen en el runner (nube), luego se publican en un registry (GHCR), y el servidor las descarga. Tres pasos donde antes había uno.</li>
+    <li>El deploy requiere SSH, claves, IPs, rutas remotas — cuatro Secrets que pueden rotar o fallar.</li>
+  </ul>
+
+  <p>Con un <strong>self-hosted runner</strong> el proceso es el runner <em>es</em> la máquina de producción. Cuando el job corre <code>docker compose up -d</code>, lo hace directamente sobre el stack que está sirviendo tráfico. No hay red que cruzar.</p>
+
+  <div class="callout ci">
+    <div class="ct">Fundamento · Eken et al. (2025) — PS135</div>
+    Stieler y Bauer proponen un Git workflow donde "a CI/CD tool <strong>hosted on a resource-rich machine</strong> executes ML pipelines for training, testing, and integrating ML models based on the code committed by developers." El self-hosted runner implementa exactamente ese patrón.
+  </div>
+
+  <table>
+    <tr><th>Aspecto</th><th>Runner en la nube (antes)</th><th>Self-hosted (esta clase)</th></tr>
+    <tr><td><strong>Dónde corre el job</strong></td><td>VM efímera en GitHub</td><td>Proceso en nuestra máquina</td></tr>
+    <tr><td><strong>Acceso a Docker</strong></td><td>Indirecto (SSH al servidor)</td><td>Directo (<code>/var/run/docker.sock</code>)</td></tr>
+    <tr><td><strong>DNS interno</strong></td><td>No — workaround host-gateway</td><td>Sí — comparte <code>mlops-net</code></td></tr>
+    <tr><td><strong>Imágenes</strong></td><td>Build → push GHCR → pull</td><td>Build local, sin registry</td></tr>
+    <tr><td><strong>Secrets de infra</strong></td><td>4 (host, user, key, path)</td><td>0</td></tr>
+  </table>
+</section>
+
+<!-- ══════════ ARQUITECTURA ══════════ -->
+<section id="arquitectura">
+  <h2>Arquitectura: todo en una máquina</h2>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">diagrama de componentes</span></div>
+    <div class="cb-body"><code>┌─────────────────────────────────────────────────────────────────┐
+│                     Máquina física / VPS                        │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  <span class="ch">GitHub Actions Runner</span>  (proceso systemd permanente)      │   │
+│  │                                                         │   │
+│  │  Escucha eventos de GitHub.com  ←──── HTTPS ────────────┼───┤
+│  │                                                         │   │
+│  │  En CI (PR abierto):                                    │   │
+│  │    checkout → build → mlflow up → train → QA suite      │   │
+│  │                                                         │   │
+│  │  En CD (merge a main):                                  │   │
+│  │    rsync → build → rolling update → post-deploy QA      │   │
+│  └──────────────────┬──────────────────────────────────────┘   │
+│                     │  /var/run/docker.sock                     │
+│                     ▼                                           │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  <span class="cv">Docker  (red: mlops-net)</span>                                 │   │
+│  │                                                         │   │
+│  │  <span class="cs">mlflow</span>         :5001   restart: unless-stopped        │   │
+│  │  <span class="cs">inference-api</span>  :8000   restart: unless-stopped        │   │
+│  │  <span class="cs">drift-detector</span>         restart: unless-stopped        │   │
+│  │  <span class="cs">nginx</span>          :80     restart: unless-stopped        │   │
+│  │                                                         │   │
+│  │  <span class="ch">model-trainer</span>   efímero (job de CD / retrain)         │   │
+│  │  <span class="ch">test-runner</span>     efímero (job de CI / post-deploy QA)   │   │
+│  │                                                         │   │
+│  │  Volumen: <span class="cr">mlflow-data</span>  (persiste entre deploys)          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘</code></div>
+  </div>
+
+  <h3>Flujo en un Pull Request</h3>
+  <div class="flow">
+    <div class="fb tr">git push<br><small>feature branch</small></div><div class="fa">→</div>
+    <div class="fb ci">lint<br><small>flake8</small></div><div class="fa">→</div>
+    <div class="fb ci">build<br><small>local cache</small></div><div class="fa">→</div>
+    <div class="fb ci">train<br><small>model-trainer</small></div><div class="fa">→</div>
+    <div class="fb ci">QA suite<br><small>test-runner</small></div><div class="fa">→</div>
+    <div class="fb cd">PR: ✓<br><small>merge habilitado</small></div>
+  </div>
+
+  <h3>Flujo en merge a main</h3>
+  <div class="flow">
+    <div class="fb tr">merge main</div><div class="fa">→</div>
+    <div class="fb ci">rsync<br><small>/opt/mlops-stack</small></div><div class="fa">→</div>
+    <div class="fb ci">build<br><small>local</small></div><div class="fa">→</div>
+    <div class="fb cd">rolling<br><small>update</small></div><div class="fa">→</div>
+    <div class="fb lc">post-deploy<br><small>QA suite</small></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════ DOCKER COMPOSE ══════════ -->
+<h2 style="border:none;padding:0;margin-bottom:8px;color:var(--text);font-size:1.5rem">Construcción del Docker Compose</h2>
+<p style="color:var(--muted);margin-bottom:28px">Cómo se diseña el <code>docker-compose.yml</code> para coexistir con el runner de CI/CD en la misma máquina.</p>
+
+<section id="compose-red">
+  <h2>Red y volumen compartido</h2>
+  <p>La primera decisión de diseño es definir una red con nombre propio y un volumen persistente. Esto es lo que permite que el runner, el test-runner y los servicios de producción se comuniquen sin configuración adicional.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">docker-compose.yml</span><span class="cb-tag tag-same">sin cambios</span></div>
+    <div class="cb-body"><code><span class="ck">networks:</span>
+  <span class="ck">mlops-net:</span>
+    <span class="ck">driver:</span> <span class="cv">bridge</span>   <span class="ann">red con nombre → DNS interno entre contenedores</span>
+
+<span class="ck">volumes:</span>
+  <span class="ck">mlflow-data:</span>   <span class="ann-w">persiste entre deploys y reboots del host</span></code></div>
+  </div>
+
+  <p>La red <code>mlops-net</code> es el punto clave: cuando el runner ejecuta <code>docker compose run test-runner</code>, ese contenedor se une automáticamente a <code>mlops-net</code>. Desde ahí, <code>http://mlflow:5001</code> resuelve por DNS interno — el mismo mecanismo que usan los servicios entre sí. Así desaparece el problema de red que tenía la versión anterior.</p>
+
+  <p>El volumen <code>mlflow-data</code> es el otro elemento crítico: almacena la base de datos SQLite de MLFlow y todos los artefactos del modelo. Al sobrevivir entre deploys, el modelo entrenado en una ejecución anterior sigue disponible en la siguiente — el CD puede detectar si ya existe y saltar el entrenamiento.</p>
+</section>
+
+<section id="compose-servicios">
+  <h2>Servicios permanentes: los cuatro pilares</h2>
+  <p>Cuatro servicios corren de forma continua en producción. Todos comparten el mismo patrón de construcción:</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">docker-compose.yml — patrón de servicio permanente</span><span class="cb-tag tag-same">sin cambios en lógica</span></div>
+    <div class="cb-body"><code><span class="ck">inference-api:</span>
+  <span class="ck">build:</span> <span class="cv">./inference-api</span>       <span class="ann">construye localmente siempre</span>
+  <span class="ck">container_name:</span> <span class="cv">inference-api</span>  <span class="ann">nombre fijo → referenciable desde scripts</span>
+  <span class="ck">restart:</span> <span class="cv">unless-stopped</span>      <span class="ann-w">NUEVO: reinicia si cae, no si se detiene manualmente</span>
+  <span class="ck">ports:</span>
+    <span class="cv">- "8000:8000"</span>             <span class="ann">expuesto al host → accesible desde el runner</span>
+  <span class="ck">environment:</span>
+    <span class="ck">MLFLOW_TRACKING_URI:</span> <span class="cv">http://mlflow:5001</span>   <span class="ann">DNS interno</span>
+    <span class="ck">MODEL_NAME:</span>          <span class="cv">iris-classifier</span>
+    <span class="ck">MODEL_STAGE:</span>         <span class="cv">Production</span>
+  <span class="ck">volumes:</span>
+    <span class="cv">- mlflow-data:/mlflow</span>     <span class="ann">acceso al volumen compartido</span>
+  <span class="ck">depends_on:</span>
+    <span class="ck">mlflow:</span>
+      <span class="ck">condition:</span> <span class="cv">service_healthy</span>  <span class="ann">no arranca hasta que MLFlow pase health check</span>
+  <span class="ck">healthcheck:</span>
+    <span class="ck">test:</span> <span class="cv">["CMD", "curl", "-sf", "http://localhost:8000/health"]</span>
+    <span class="ck">interval:</span> <span class="cv">10s</span>
+    <span class="ck">retries:</span>  <span class="cv">20</span>
+    <span class="ck">start_period:</span> <span class="cv">60s</span>   <span class="ann">60s de gracia para cargar el modelo desde MLFlow</span>
+  <span class="ck">networks:</span>
+    <span class="cv">- mlops-net</span></code></div>
+  </div>
+
+  <p>Cada uno de los cuatro servicios permanentes (mlflow, inference-api, drift-detector, nginx) sigue este mismo patrón. Las diferencias entre ellos son: qué puertos exponen, qué variables de entorno necesitan, y si tienen healthcheck propio.</p>
+</section>
+
+<section id="compose-efimeros">
+  <h2>Servicios efímeros: jobs de CI/CD</h2>
+  <p><code>model-trainer</code> y <code>test-runner</code> son fundamentalmente diferentes: no deben correr de forma continua. Se ejecutan una vez, hacen su trabajo, y terminan. Por eso <strong>no tienen <code>restart</code></strong>.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">docker-compose.yml — servicios efímeros</span><span class="cb-tag tag-same">sin cambios</span></div>
+    <div class="cb-body"><code><span class="ck">model-trainer:</span>
+  <span class="ck">build:</span> <span class="cv">./model-trainer</span>
+  <span class="ck">container_name:</span> <span class="cv">model-trainer</span>
+  <span class="cm"># Sin restart: → Docker no lo reinicia automáticamente</span>
+  <span class="cm"># Se invoca con: docker compose run --rm model-trainer</span>
+  <span class="cm"># El flag --rm elimina el contenedor al terminar</span>
+  <span class="ck">environment:</span>
+    <span class="ck">MLFLOW_TRACKING_URI:</span> <span class="cv">http://mlflow:5001</span>
+    <span class="ck">MLFLOW_ARTIFACT_ROOT:</span> <span class="cv">/mlflow/artifacts</span>
+  <span class="ck">volumes:</span>
+    <span class="cv">- mlflow-data:/mlflow</span>   <span class="ann">escribe el modelo en el volumen compartido</span>
+  <span class="ck">depends_on:</span>
+    <span class="ck">mlflow:</span>
+      <span class="ck">condition:</span> <span class="cv">service_healthy</span>
+  <span class="ck">networks:</span>
+    <span class="cv">- mlops-net</span>
+
+<span class="ck">test-runner:</span>
+  <span class="ck">build:</span> <span class="cv">./tests</span>
+  <span class="ck">container_name:</span> <span class="cv">test-runner</span>
+  <span class="cm"># Sin restart: → tampoco se reinicia</span>
+  <span class="cm"># Se invoca con: docker compose run --rm test-runner</span>
+  <span class="ck">environment:</span>
+    <span class="ck">MLFLOW_TRACKING_URI:</span> <span class="cv">http://mlflow:5001</span>
+    <span class="ck">INFERENCE_API_URL:</span>   <span class="cv">http://inference-api:8000</span>   <span class="ann">DNS interno — funciona en CI</span>
+    <span class="ck">GATE_MIN_ACCURACY:</span>   <span class="cv">"0.90"</span>
+    <span class="ck">GATE_MIN_F1:</span>         <span class="cv">"0.90"</span>
+    <span class="ck">GATE_MAX_LATENCY_MS:</span> <span class="cv">"500"</span>
+  <span class="ck">volumes:</span>
+    <span class="cv">- mlflow-data:/mlflow</span>
+  <span class="ck">networks:</span>
+    <span class="cv">- mlops-net</span></code></div>
+  </div>
+</section>
+
+<section id="compose-restart">
+  <h2>La clave del diseño: restart: unless-stopped</h2>
+  <p>Esta política es lo que hace que el stack sea autónomo en la misma máquina del runner:</p>
+
+  <table>
+    <tr><th>Política</th><th>Comportamiento</th><th>Cuándo usarla</th></tr>
+    <tr><td><code>no</code> (default)</td><td>No reinicia nunca</td><td>Jobs CI/CD, one-shot tasks</td></tr>
+    <tr><td><code>always</code></td><td>Reinicia siempre, incluso si se detuvo manualmente</td><td>Servicios críticos sin mantenimiento</td></tr>
+    <tr><td><code><strong>unless-stopped</strong></code></td><td>Reinicia si cae, pero respeta <code>docker compose stop</code></td><td><strong>Servicios de producción con CI/CD</strong></td></tr>
+    <tr><td><code>on-failure</code></td><td>Solo si termina con error</td><td>Jobs que pueden fallar legítimamente</td></tr>
+  </table>
+
+  <p><code>unless-stopped</code> es la política correcta aquí porque el CD necesita poder hacer <code>docker compose stop inference-api</code> para el rolling update sin que Docker lo reinicie inmediatamente. Con <code>always</code>, el contenedor volvería a arrancar antes de que el CD pueda reemplazarlo.</p>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════ WORKFLOW CI ══════════ -->
+<h2 style="border:none;padding:0;margin-bottom:8px;color:var(--text);font-size:1.5rem">Construcción del Workflow CI</h2>
+<p style="color:var(--muted);margin-bottom:28px">Archivo: <code>.github/workflows/ci.yml</code> — se dispara en cada Pull Request.</p>
+
+<section id="ci-trigger">
+  <h2>Estructura base: trigger y runs-on</h2>
+  <p>La primera sección de cualquier workflow define <em>cuándo</em> corre y <em>dónde</em>. Son las dos decisiones más importantes del archivo.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">ci.yml — sección on: y runs-on:</span><span class="cb-tag tag-mod">modificado</span></div>
+    <div class="cb-body"><code><span class="ck">name:</span> <span class="cv">CI — Build & Test</span>
+
+<span class="ck">on:</span>
+  <span class="ck">pull_request:</span>
+    <span class="ck">branches:</span> <span class="cv">[main, develop]</span>   <span class="ann">corre en cualquier PR que apunte a main o develop</span>
+  <span class="ck">push:</span>
+    <span class="ck">branches:</span> <span class="cv">[develop]</span>          <span class="ann">también corre en push directo a develop</span>
+
+<span class="cm"># El trigger pull_request es el que bloquea el merge:</span>
+<span class="cm"># si el job falla, GitHub no permite merge hasta que pase.</span>
+
+<span class="ck">jobs:</span>
+  <span class="ck">lint:</span>
+    <span class="ck">runs-on:</span> <span class="ch">self-hosted</span>          <span class="ann-w">CAMBIO: antes era ubuntu-latest</span>
+    <span class="cm"># self-hosted le dice a GitHub que busque un runner registrado</span>
+    <span class="cm"># con ese label en nuestro repositorio — no una VM en la nube.</span></code></div>
+  </div>
+
+  <div class="callout ci">
+    <div class="ct">¿Por qué dos jobs separados (lint y test)?</div>
+    Separar lint de test permite que el lint falle rápido (en segundos) sin gastar tiempo levantando Docker. En CI, la velocidad de feedback importa: el desarrollador sabe si hay un error de sintaxis en 30 segundos, no en 5 minutos. El job <code>test</code> tiene <code>needs: lint</code> — no corre si lint falla.
+  </div>
+</section>
+
+<section id="ci-lint">
+  <h2>Job lint: validación estática rápida</h2>
+  <p>El primer job solo necesita Python — no Docker, no servicios. Valida que el código tiene la sintaxis correcta y que el <code>docker-compose.yml</code> es válido antes de intentar construir nada.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">ci.yml — job lint completo</span><span class="cb-tag tag-same">lógica sin cambios</span></div>
+    <div class="cb-body"><code><span class="ck">lint:</span>
+  <span class="ck">name:</span> <span class="cv">Lint</span>
+  <span class="ck">runs-on:</span> <span class="cv">self-hosted</span>
+  <span class="ck">steps:</span>
+    <span class="ck">- uses:</span> <span class="cv">actions/checkout@v4</span>    <span class="ann">descarga el código del PR</span>
+
+    <span class="ck">- name:</span> <span class="cv">Lint Python</span>
+      <span class="ck">run:</span> <span class="cv">|</span>
+        <span class="cs">pip install flake8 --quiet</span>
+        <span class="cs">flake8 model-trainer/train.py \</span>
+               <span class="cs">inference-api/app.py \</span>
+               <span class="cs">drift-detector/detector.py \</span>
+               <span class="cs">tests/run_tests.py tests/test_*.py \</span>
+          <span class="ch">--max-line-length=110 \</span>
+          <span class="ch">--extend-ignore=E501,W503 \</span>
+          <span class="ch">--statistics || true</span>     <span class="ann">|| true → reporta pero no bloquea el PR por estilo</span>
+
+    <span class="ck">- name:</span> <span class="cv">Validate docker-compose</span>
+      <span class="ck">run:</span> <span class="cv">docker compose config --quiet</span>   <span class="ann">detecta errores de YAML antes de usarlo</span></code></div>
+  </div>
+</section>
+
+<section id="ci-build">
+  <h2>Step: build images</h2>
+  <p>Construye todas las imágenes Docker en paralelo usando la cache local del host. Como el runner vive en la misma máquina que el stack de producción, las capas ya construidas en deploys anteriores están en cache — el build es rápido.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">ci.yml — step build</span><span class="cb-tag tag-mod">sin GHCR</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Build images</span>
+  <span class="ck">run:</span> <span class="cv">docker compose build --parallel</span>
+
+<span class="cm"># --parallel: construye mlflow, model-trainer, inference-api,</span>
+<span class="cm"># drift-detector, tests, nginx simultáneamente.</span>
+<span class="cm"></span>
+<span class="cm"># A diferencia de la versión anterior (runner en la nube),</span>
+<span class="cm"># aquí no hay login a GHCR ni push de imágenes.</span>
+<span class="cm"># Las imágenes quedan en el daemon Docker local del host.</span></code></div>
+  </div>
+</section>
+
+<section id="ci-mlflow">
+  <h2>Step: start MLFlow</h2>
+  <p>MLFlow debe estar corriendo antes de que el trainer pueda registrar el modelo. Este step lo levanta y espera explícitamente al health check en lugar de simplemente dormir N segundos. Si MLFlow no responde en 120 segundos, el step falla con un mensaje claro.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">ci.yml — step MLFlow</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Start MLFlow</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose up -d mlflow</span>   <span class="ann">levanta en background</span>
+
+    <span class="cm"># Espera activa: consulta el estado del health check</span>
+    <span class="cm"># cada 3 segundos hasta que aparezca "(healthy)"</span>
+    <span class="cs">timeout 120 bash -c \</span>
+      <span class="ch">'until docker compose ps mlflow | grep -q "(healthy)"; do sleep 3; done'</span>
+    <span class="cs">echo "MLFlow healthy ✓"</span>
+
+<span class="cm"># El health check está definido en docker-compose.yml:</span>
+<span class="cm"># test: ["CMD", "curl", "-sf", "http://localhost:5001/"]</span>
+<span class="cm"># Docker marca el contenedor como healthy cuando curl retorna 0.</span></code></div>
+  </div>
+</section>
+
+<section id="ci-train">
+  <h2>Step: train model</h2>
+  <p>Ejecuta el trainer como contenedor efímero. <code>--rm</code> elimina el contenedor al terminar — el modelo queda registrado en MLFlow (en el volumen compartido), no en el contenedor.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">ci.yml — step train</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Train model</span>
+  <span class="ck">run:</span> <span class="cv">docker compose run --rm model-trainer</span>
+
+<span class="cm"># docker compose run  →  inicia un contenedor one-shot</span>
+<span class="cm"># --rm               →  lo elimina cuando termina</span>
+<span class="cm"># model-trainer      →  servicio definido en docker-compose.yml</span>
+<span class="cm"></span>
+<span class="cm"># El trainer hace:</span>
+<span class="cm">#   1. Conectarse a http://mlflow:5001 (DNS interno)</span>
+<span class="cm">#   2. Entrenar RandomForest sobre Iris</span>
+<span class="cm">#   3. Registrar métricas, parámetros y el modelo en MLFlow</span>
+<span class="cm">#   4. Promover la nueva versión a stage "Production"</span>
+<span class="cm">#   5. Salir con código 0 (éxito) o 1 (fallo)</span>
+<span class="cm"># Si sale con 1, el step falla y el PR queda bloqueado.</span></code></div>
+  </div>
+</section>
+
+<section id="ci-api">
+  <h2>Step: start inference-api</h2>
+  <p>Levanta la API y espera hasta que responda al health check. La <code>start_period</code> de 60 segundos que está en el <code>docker-compose.yml</code> da tiempo para que la API cargue el modelo desde el Registry de MLFlow antes de que Docker la evalúe.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">ci.yml — step inference-api</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Start inference-api</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose up -d inference-api</span>
+
+    <span class="cm"># Espera activa sobre el puerto del host (no DNS interno)</span>
+    <span class="cm"># porque aquí estamos en el runner, no en un contenedor</span>
+    <span class="cs">timeout 120 bash -c \</span>
+      <span class="ch">'until curl -sf http://localhost:8000/health > /dev/null; do sleep 4; done'</span>
+    <span class="cs">echo "inference-api ready ✓"</span></code></div>
+  </div>
+
+  <div class="callout cs">
+    <div class="ct">¿Por qué localhost aquí pero mlflow:5001 en otros pasos?</div>
+    Dentro del proceso del runner (bash), usamos <code>localhost:8000</code> — el puerto expuesto al host. Dentro de un contenedor Docker (como test-runner), usamos <code>http://inference-api:8000</code> — el nombre DNS interno de la red. Son dos perspectivas distintas de la misma máquina.
+  </div>
+</section>
+
+<section id="ci-qa">
+  <h2>Step: QA suite — el quality gate</h2>
+  <p>Este es el step más importante del CI. Ejecuta la misma suite de tests de la Clase 03. Si algún quality gate falla, el exit code del contenedor es 1, el step falla, el job falla, y GitHub bloquea el merge del PR.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">ci.yml — step QA (el corazón del CI)</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Run QA suite</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose run --rm \</span>
+      <span class="ch">-e MLFLOW_TRACKING_URI=http://mlflow:5001 \</span>    <span class="ann">DNS interno — funciona porque comparte mlops-net</span>
+      <span class="ch">-e INFERENCE_API_URL=http://inference-api:8000 \</span>
+      <span class="cs">test-runner</span>
+
+<span class="cm"># El test-runner corre los tres niveles de la Clase 03:</span>
+<span class="cm">#   Nivel 1: Data Tests (21 tests sobre el dataset)</span>
+<span class="cm">#   Nivel 2: Model Tests + Quality Gates (accuracy ≥ 0.90, F1 ≥ 0.90)</span>
+<span class="cm">#   Nivel 3: API Tests (contrato, latencia SLA, manejo de errores)</span>
+<span class="cm"></span>
+<span class="cm"># Exit code 0 → todos los gates pasaron → CI verde → PR puede mergearse</span>
+<span class="cm"># Exit code 1 → algún gate falló → CI rojo → PR bloqueado</span>
+
+<span class="cm"># Por qué funciona el DNS interno aquí:</span>
+<span class="cm"># docker compose run agrega test-runner a mlops-net.</span>
+<span class="cm"># mlflow e inference-api están en mlops-net.</span>
+<span class="cm"># El resolver DNS de Docker resuelve "mlflow" a su IP en la red.</span></code></div>
+  </div>
+</section>
+
+<section id="ci-cleanup">
+  <h2>Step: cleanup</h2>
+  <p>El cleanup corre siempre — incluso si los tests fallaron — gracias a <code>if: always()</code>. Elimina los contenedores creados durante el CI pero <strong>no los volúmenes</strong>: el modelo entrenado en MLFlow persiste para el próximo run.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">ci.yml — step cleanup</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Cleanup CI containers</span>
+  <span class="ck">if:</span> <span class="ch">always()</span>   <span class="ann">corre incluso si los pasos anteriores fallaron</span>
+  <span class="ck">run:</span> <span class="cv">docker compose down --remove-orphans</span>
+
+<span class="cm"># docker compose down       → detiene y elimina los contenedores</span>
+<span class="cm"># --remove-orphans          → elimina contenedores huérfanos</span>
+<span class="cm"># Sin -v                    → conserva mlflow-data entre runs de CI</span>
+<span class="cm"></span>
+<span class="cm"># Si se agregara -v, el modelo entrenado se borraría y habría</span>
+<span class="cm"># que reentrenar en cada run de CI — costoso e innecesario.</span></code></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════ WORKFLOW CD ══════════ -->
+<h2 style="border:none;padding:0;margin-bottom:8px;color:var(--text);font-size:1.5rem">Construcción del Workflow CD</h2>
+<p style="color:var(--muted);margin-bottom:28px">Archivo: <code>.github/workflows/cd.yml</code> — se dispara solo en push a <code>main</code>.</p>
+
+<section id="cd-trigger">
+  <h2>Trigger y control de concurrencia</h2>
+  <p>El CD tiene dos propiedades que no tiene el CI: se dispara solo en <code>main</code> (no en PRs), y tiene un bloque de concurrencia para evitar que dos deploys corran simultáneamente.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">cd.yml — sección on: y concurrency:</span><span class="cb-tag tag-new">nuevo</span></div>
+    <div class="cb-body"><code><span class="ck">on:</span>
+  <span class="ck">push:</span>
+    <span class="ck">branches:</span> <span class="cv">[main]</span>   <span class="ann">solo en merge a main — no en PRs</span>
+
+<span class="ck">env:</span>
+  <span class="ck">DEPLOY_DIR:</span>      <span class="cv">/opt/mlops-stack</span>   <span class="ann">directorio permanente en el host</span>
+  <span class="ck">COMPOSE_PROJECT:</span> <span class="cv">mlops</span>              <span class="ann">nombre del proyecto para docker compose -p</span>
+
+<span class="ck">jobs:</span>
+  <span class="ck">deploy:</span>
+    <span class="ck">runs-on:</span> <span class="cv">self-hosted</span>
+    <span class="ck">concurrency:</span>
+      <span class="ck">group:</span>              <span class="cv">production-deploy</span>   <span class="ann">nombre del grupo de concurrencia</span>
+      <span class="ck">cancel-in-progress:</span> <span class="cv">false</span>               <span class="ann-w">espera en cola — no cancela el deploy anterior</span>
+
+<span class="cm"># cancel-in-progress: false es crucial en CD:</span>
+<span class="cm"># si dos merges llegan en rápida sucesión, el segundo</span>
+<span class="cm"># espera a que el primero termine en lugar de interrumpirlo.</span>
+<span class="cm"># Interrumpir un deploy a mitad puede dejar el stack en</span>
+<span class="cm"># estado inconsistente.</span></code></div>
+  </div>
+</section>
+
+<section id="cd-rsync">
+  <h2>Step: sync files — rsync en lugar de SSH</h2>
+  <p>El runner hace <code>checkout</code> del repositorio en su directorio de trabajo temporal. Necesitamos copiar esos archivos al directorio permanente <code>/opt/mlops-stack</code> donde vive el stack. <code>rsync</code> sincroniza solo los archivos que cambiaron.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">cd.yml — step rsync</span><span class="cb-tag tag-new">reemplaza SSH</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Sync files to deploy directory</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">sudo mkdir -p /opt/mlops-stack</span>
+    <span class="cs">sudo rsync -av --delete \</span>
+      <span class="ch">--exclude='.git/' \</span>         <span class="ann">no copiar historial git</span>
+      <span class="ch">--exclude='__pycache__/' \</span>  <span class="ann">no copiar cachés de Python</span>
+      <span class="ch">--exclude='*.pyc' \</span>
+      <span class="cs">./ /opt/mlops-stack/</span>
+
+<span class="cm"># rsync -av --delete:</span>
+<span class="cm">#   -a  → archive: preserva permisos, timestamps, symlinks</span>
+<span class="cm">#   -v  → verbose: muestra qué archivos cambiaron</span>
+<span class="cm">#   --delete → elimina en destino los archivos que ya no están en origen</span>
+<span class="cm">#             (garantiza que el directorio de deploy refleja exactamente</span>
+<span class="cm">#              el estado del repositorio en ese commit)</span></code></div>
+  </div>
+</section>
+
+<section id="cd-build">
+  <h2>Step: build — reconstruir con el código nuevo</h2>
+  <p>Construye las imágenes desde el directorio de deploy (ya actualizado con rsync). Como el daemon Docker tiene cache de las capas anteriores, solo se reconstruyen las capas que cambiaron.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">cd.yml — step build</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Build updated images</span>
+  <span class="ck">working-directory:</span> <span class="cv">/opt/mlops-stack</span>   <span class="ann">trabajar desde el directorio permanente</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose -p mlops build --parallel</span>
+
+<span class="cm"># -p mlops: nombre del proyecto.</span>
+<span class="cm"># Evita que los contenedores de CI (que también usan</span>
+<span class="cm"># docker compose) interfieran con los de producción.</span>
+<span class="cm"># Los contenedores de producción se llaman mlops_mlflow_1,</span>
+<span class="cm"># los de CI se llaman con el nombre del directorio de trabajo.</span></code></div>
+  </div>
+</section>
+
+<section id="cd-mlflow">
+  <h2>Step: ensure MLFlow is running</h2>
+  <p>MLFlow puede estar ya corriendo de un deploy anterior (gracias a <code>restart: unless-stopped</code>). Este step lo levanta si no está, o lo deja como está si ya responde. Es idempotente.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">cd.yml — step ensure MLFlow</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Ensure MLFlow is running</span>
+  <span class="ck">working-directory:</span> <span class="cv">/opt/mlops-stack</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose -p mlops up -d mlflow</span>   <span class="ann">up -d es idempotente: no recrea si ya corre</span>
+    <span class="cs">timeout 120 bash -c \</span>
+      <span class="ch">'until docker compose -p mlops ps mlflow | grep -q "(healthy)"; do sleep 3; done'</span>
+    <span class="cs">echo "MLFlow healthy ✓"</span></code></div>
+  </div>
+</section>
+
+<section id="cd-train">
+  <h2>Step: train model if needed</h2>
+  <p>Esta es la lógica más sofisticada del CD: antes de entrenar, consulta el Model Registry de MLFlow para saber si ya existe un modelo en Production. Si existe (volumen persistente de un deploy anterior), no reentrenar — ese modelo sigue siendo válido. Si no existe (primer deploy o volumen eliminado), entrenar.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">cd.yml — step train if needed</span><span class="cb-tag tag-new">nuevo</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Train model if needed</span>
+  <span class="ck">working-directory:</span> <span class="cv">/opt/mlops-stack</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cm"># Consultar el Registry directamente desde Python dentro del contenedor</span>
+    <span class="cv">MODEL_EXISTS</span>=$(docker compose -p mlops run --rm \
+      -e MLFLOW_TRACKING_URI=http://mlflow:5001 \
+      model-trainer python -c <span class="cs">"
+    import mlflow, os
+    mlflow.set_tracking_uri(os.environ.get('MLFLOW_TRACKING_URI'))
+    from mlflow import MlflowClient
+    c = MlflowClient()
+    try:
+        vs = c.get_latest_versions('iris-classifier', stages=['Production'])
+        print('exists' if vs else 'missing')
+    except Exception:
+        print('missing')
+    "</span> 2>/dev/null || echo "missing")
+
+    if echo "<span class="cv">$MODEL_EXISTS</span>" | grep -q "missing"; then
+      echo "No model in Production — training..."
+      docker compose -p mlops run --rm model-trainer
+    else
+      echo "Model already in Production — skipping training"   <span class="ann-g">reutiliza modelo existente</span>
+    fi</code></div>
+  </div>
+</section>
+
+<section id="cd-rolling">
+  <h2>Step: rolling update (zero-downtime)</h2>
+  <p>En lugar de <code>docker compose down && docker compose up</code> (que causa downtime), el CD actualiza un servicio a la vez. La inference-api se actualiza primero y se verifica antes de continuar con los demás.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">cd.yml — rolling update</span><span class="cb-tag tag-new">nuevo</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Update inference-api (zero-downtime)</span>
+  <span class="ck">working-directory:</span> <span class="cv">/opt/mlops-stack</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose -p mlops up -d \</span>
+      <span class="ch">--no-deps \</span>   <span class="ann">no reiniciar dependencias (mlflow)</span>
+      <span class="ch">--build \</span>     <span class="ann">usar la imagen recién construida</span>
+      <span class="cs">inference-api</span>
+
+    <span class="cs">sleep 8</span>   <span class="ann">dar tiempo para que el nuevo contenedor cargue el modelo</span>
+
+    <span class="cm"># Verificar que la API responde correctamente</span>
+    <span class="cs">curl -sf http://localhost:8000/health > /dev/null \</span>
+      <span class="ch">&& echo "inference-api healthy ✓" \</span>
+      <span class="cr">|| (echo "UNHEALTHY — rollback needed" && exit 1)</span>
+
+<span class="ck">- name:</span> <span class="cv">Update remaining services</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose -p mlops up -d --no-deps drift-detector nginx</span>
+    <span class="cm"># mlflow no se actualiza aquí — tiene su propio ciclo de vida</span>
+    <span class="cm"># y restart: unless-stopped garantiza que sigue corriendo</span></code></div>
+  </div>
+
+  <div class="callout cw">
+    <div class="ct">¿Qué pasa si la verification falla?</div>
+    El step termina con <code>exit 1</code>, el job CD falla, y GitHub Actions notifica al equipo. El contenedor anterior sigue corriendo porque Docker no lo eliminó — <code>up -d --no-deps</code> reemplaza el contenedor, pero si el nuevo falla el healthcheck, el stack queda con el contenedor nuevo (no el viejo) en estado degradado. Para un rollback manual: <code>git revert + push a main</code> dispara un nuevo CD con el código anterior.
+  </div>
+</section>
+
+<section id="cd-postqa">
+  <h2>Step: post-deploy QA</h2>
+  <p>La misma suite de tests de la Clase 03 corre de nuevo, ahora contra el stack en producción real. Detecta cualquier problema de integración que no apareció durante el CI.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">cd.yml — post-deploy QA</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Post-deploy QA</span>
+  <span class="ck">working-directory:</span> <span class="cv">/opt/mlops-stack</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cs">docker compose -p mlops run --rm \</span>
+      <span class="ch">-e MLFLOW_TRACKING_URI=http://mlflow:5001 \</span>
+      <span class="ch">-e INFERENCE_API_URL=http://inference-api:8000 \</span>
+      <span class="cs">test-runner</span>
+
+<span class="cm"># Esta es la diferencia entre CI y CD:</span>
+<span class="cm"># En CI: los tests validan el candidato (¿merece llegar a producción?)</span>
+<span class="cm"># En CD: los tests validan producción (¿el deploy fue exitoso?)</span>
+<span class="cm"># Si falla aquí, el deploy se completó pero algo salió mal.</span>
+<span class="cm"># Hay que investigar — el código ya está en main.</span></code></div>
+  </div>
+</section>
+
+<section id="cd-summary">
+  <h2>Step: deploy summary</h2>
+  <p>Escribe un resumen en el panel de GitHub Actions. Este resumen es visible en la interfaz web de GitHub para cualquier miembro del equipo, sin necesidad de leer los logs completos.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">cd.yml — summary</span></div>
+    <div class="cb-body"><code><span class="ck">- name:</span> <span class="cv">Deploy summary</span>
+  <span class="ck">if:</span> <span class="cv">always()</span>   <span class="ann">corre incluso si algo falló</span>
+  <span class="ck">run:</span> <span class="cv">|</span>
+    <span class="cm"># $GITHUB_STEP_SUMMARY es una variable especial de GitHub Actions</span>
+    <span class="cm"># Todo lo que se escribe ahí aparece como Markdown en la UI</span>
+    <span class="cs">echo "## Deploy Summary" >> $GITHUB_STEP_SUMMARY</span>
+    <span class="cs">echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY</span>
+    <span class="cs">echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY</span>
+    <span class="cs">docker compose -p mlops ps \</span>
+      <span class="ch">--format "table {{.Name}}\t{{.Status}}" \</span>
+      <span class="cs">>> $GITHUB_STEP_SUMMARY</span>   <span class="ann">estado de cada contenedor en la tabla</span></code></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════ RETRAIN WORKFLOW ══════════ -->
+<h2 style="border:none;padding:0;margin-bottom:8px;color:var(--text);font-size:1.5rem">Construcción del Workflow de Reentrenamiento</h2>
+<p style="color:var(--muted);margin-bottom:28px">Archivo: <code>.github/workflows/retrain.yml</code> — complementa el drift-detector de la Clase 01.</p>
+
+<section id="retrain-trigger">
+  <h2>Trigger: schedule + workflow_dispatch</h2>
+  <p>Este workflow tiene dos formas de dispararse: automáticamente en un horario fijo (cron), o manualmente desde la UI de GitHub Actions con parámetros configurables. La combinación de ambos da flexibilidad total.</p>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">retrain.yml — triggers</span><span class="cb-tag tag-new">nuevo</span></div>
+    <div class="cb-body"><code><span class="ck">on:</span>
+  <span class="ck">schedule:</span>
+    <span class="cv">- cron:</span> <span class="cs">"0 3 * * 1"</span>   <span class="ann">lunes 03:00 UTC — cuando el tráfico es bajo</span>
+
+  <span class="ck">workflow_dispatch:</span>   <span class="ann">habilita el botón "Run workflow" en la UI de GitHub</span>
+    <span class="ck">inputs:</span>
+      <span class="ck">min_accuracy:</span>
+        <span class="ck">description:</span> <span class="cv">"Accuracy mínima del quality gate"</span>
+        <span class="ck">default:</span>     <span class="cv">"0.90"</span>
+      <span class="ck">min_f1:</span>
+        <span class="ck">description:</span> <span class="cv">"F1-score mínimo"</span>
+        <span class="ck">default:</span>     <span class="cv">"0.90"</span>
+
+<span class="cm"># workflow_dispatch permite disparar el reentrenamiento:</span>
+<span class="cm"># - Desde la UI: GitHub → Actions → Scheduled Retrain → Run workflow</span>
+<span class="cm"># - Desde la API: curl -X POST .../actions/workflows/retrain.yml/dispatches</span>
+<span class="cm"># - Con parámetros distintos: ej. min_accuracy=0.95 para un release crítico</span></code></div>
+  </div>
+</section>
+
+<section id="retrain-steps">
+  <h2>Steps del reentrenamiento</h2>
+
+  <div class="cb">
+    <div class="cb-head"><span class="cb-label">retrain.yml — steps completos</span></div>
+    <div class="cb-body"><code><span class="ck">steps:</span>
+  <span class="cm"># 1. Verificar que el stack está corriendo antes de intentar reentrenar</span>
+  <span class="ck">- name:</span> <span class="cv">Verify stack is running</span>
+    <span class="ck">run:</span> <span class="cv">|</span>
+      <span class="cs">docker compose -p mlops \</span>
+        <span class="ch">-f /opt/mlops-stack/docker-compose.yml \</span>   <span class="ann">usar el compose de producción</span>
+        <span class="cs">ps mlflow | grep -q "(healthy)"</span>
+      <span class="cm"># Si MLFlow no está healthy, el step falla aquí con mensaje claro</span>
+
+  <span class="cm"># 2. Entrenar el nuevo modelo (challenger)</span>
+  <span class="ck">- name:</span> <span class="cv">Retrain model</span>
+    <span class="ck">working-directory:</span> <span class="cv">/opt/mlops-stack</span>
+    <span class="ck">run:</span> <span class="cv">|</span>
+      <span class="cs">docker compose -p mlops run --rm model-trainer</span>
+      <span class="cm"># Registra el nuevo modelo como una nueva versión en el Registry</span>
+      <span class="cm"># y lo promueve a Production (archivando la versión anterior)</span>
+
+  <span class="cm"># 3. Correr quality gates sobre el nuevo modelo</span>
+  <span class="ck">- name:</span> <span class="cv">Run QA on new model</span>
+    <span class="ck">run:</span> <span class="cv">|</span>
+      <span class="cs">docker compose -p mlops run --rm \</span>
+        <span class="ch">-e GATE_MIN_ACCURACY=${{ github.event.inputs.min_accuracy || '0.90' }} \</span>
+        <span class="ch">-e GATE_MIN_F1=${{ github.event.inputs.min_f1 || '0.90' }} \</span>
+        <span class="cs">test-runner</span>
+      <span class="cm"># || '0.90': fallback para cuando se dispara por cron (sin inputs)</span>
+
+  <span class="cm"># 4. Hot-reload del modelo en la API sin reiniciar el contenedor</span>
+  <span class="ck">- name:</span> <span class="cv">Hot-reload model in inference-api</span>
+    <span class="ck">if:</span> <span class="cv">success()</span>   <span class="ann">solo si QA pasó — si falló, no recargar</span>
+    <span class="ck">run:</span> <span class="cv">|</span>
+      <span class="cs">curl -sf -X POST http://localhost:8000/reload</span>
+      <span class="cm"># Este endpoint (definido en app.py desde el Tutorial Base)</span>
+      <span class="cm"># carga la nueva versión del modelo desde MLFlow sin</span>
+      <span class="cm"># reiniciar el proceso de uvicorn — zero-downtime.</span></code></div>
+  </div>
+
+  <div class="callout ci">
+    <div class="ct">Relación con la Clase 01 (drift-detector)</div>
+    El <code>drift-detector</code> reacciona a cambios estadísticos en los datos en tiempo real — puede disparar reentrenamiento en cualquier momento del día. El <code>retrain.yml</code> garantiza un ciclo de actualización periódico incluso si el drift no es severo: por ejemplo, al actualizar dependencias del modelo, cambiar hiperparámetros, o incorporar correcciones al dataset. Los dos mecanismos son complementarios.
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════ FUNDAMENTO ══════════ -->
+<section id="fundamento">
+  <h2>Fundamento teórico · Eken et al. (2025)</h2>
+
+  <table>
+    <tr><th>Concepto implementado</th><th>Referencia</th><th>Cómo se implementa</th></tr>
+    <tr>
+      <td><strong>MLOps-as-Continuous-ML</strong></td>
+      <td>Sección 3.1.1, PS3, PS24, PS102</td>
+      <td>CI/CD integrado al ciclo de vida del modelo: cada commit puede resultar en un nuevo modelo en producción</td>
+    </tr>
+    <tr>
+      <td><strong>Pipeline triggers event-driven</strong></td>
+      <td>PS147, PS140, PS102</td>
+      <td>El CI se dispara en PR (evento git). El retrain se dispara por schedule o drift (evento de datos)</td>
+    </tr>
+    <tr>
+      <td><strong>CI/CD tool hosted on resource-rich machine</strong></td>
+      <td>PS135 (Stieler y Bauer)</td>
+      <td>El self-hosted runner en la misma máquina que el stack — acceso directo a GPU/CPU y a los datos</td>
+    </tr>
+    <tr>
+      <td><strong>Git-based workflow con ramas</strong></td>
+      <td>PS131 (Gunny et al.)</td>
+      <td>feature → develop (CI) → main (CD): PR de feature dispara CI, merge a main dispara CD</td>
+    </tr>
+    <tr>
+      <td><strong>Software containers para deploy</strong></td>
+      <td>Sección 4.5</td>
+      <td>Todos los componentes son contenedores Docker — incluyendo el trainer y el test-runner</td>
+    </tr>
+    <tr>
+      <td><strong>Quality gates antes de promote</strong></td>
+      <td>PS111 (AWS), PS62</td>
+      <td>El test-runner bloquea el merge si accuracy o F1 no alcanzan los umbrales mínimos</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ══════════ EJERCICIOS ══════════ -->
+<section id="ejercicios">
+  <h2>Ejercicios</h2>
+
+  <div style="background:var(--card);border:1px solid var(--warn);border-radius:8px;padding:20px;margin:16px 0">
+    <p style="color:var(--warn);font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Ejercicio 1 · Observar el CI en acción</p>
+    <ol>
+      <li>Crear una rama: <code>git checkout -b test/ci-demo</code></li>
+      <li>Cambiar el umbral de accuracy en <code>docker-compose.yml</code>: <code>GATE_MIN_ACCURACY: "0.99"</code></li>
+      <li>Hacer commit y push, abrir un PR hacia develop</li>
+      <li>Observar en GitHub → Actions cómo el CI corre y el QA suite falla</li>
+      <li>Revertir el cambio, hacer push — el CI debe pasar y el PR habilitarse</li>
+    </ol>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--warn);border-radius:8px;padding:20px;margin:16px 0">
+    <p style="color:var(--warn);font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Ejercicio 2 · Trigger manual de reentrenamiento</p>
+    <ol>
+      <li>Ir a GitHub → Actions → Scheduled Retrain → Run workflow</li>
+      <li>Cambiar <code>min_accuracy</code> a <code>0.95</code></li>
+      <li>Observar si el modelo existente pasa el gate o no</li>
+      <li>Verificar en MLFlow que aparece un nuevo run con tag <code>triggered_by=cicd</code></li>
+      <li>Hacer <code>curl http://localhost:8000/health</code> y verificar que <code>model_version</code> cambió</li>
+    </ol>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--warn);border-radius:8px;padding:20px;margin:16px 0">
+    <p style="color:var(--warn);font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Ejercicio 3 · Investigación: Automation Decision Dilemma</p>
+    <p style="color:var(--muted);font-size:.88rem">Eken et al. (2025) identifican el "Automation Decision Dilemma" como un desafío real en MLOps: no todo debe automatizarse. Con el pipeline implementado, discutir:</p>
+    <ol>
+      <li>¿En qué casos el post-deploy QA automático no es suficiente? (ej: modelos de diagnóstico médico)</li>
+      <li>¿Cómo agregarías un paso de aprobación humana en el CD antes de actualizar <code>inference-api</code>? (hint: GitHub Environments con required reviewers)</li>
+      <li>¿Qué métricas de negocio — más allá de accuracy y F1 — deberían evaluarse antes de un deploy en producción?</li>
+    </ol>
+  </div>
+</section>
+
+</main>
+
+<script>
+const sections = document.querySelectorAll('section[id]');
+const navItems = document.querySelectorAll('.nav-item[href]');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navItems.forEach(n => n.classList.remove('active'));
+      const a = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, {threshold: 0.3});
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

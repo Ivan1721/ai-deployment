@@ -1,21 +1,24 @@
-# CAMBIO vs versión anterior:
-# - Imágenes referencian REGISTRY_IMAGE/IMAGE_TAG para push/pull desde ghcr.io
-# - test-runner usa DNS interno (mlflow, inference-api) en CI
-# - entrypoint.sh detecta IP del gateway en desarrollo local
+# CAMBIO vs versión anterior con CI/CD remoto:
+# - Se elimina REGISTRY_IMAGE e IMAGE_TAG (no hay registry externo)
+# - Las imágenes siempre se construyen localmente con build:
+# - Se agrega restart: unless-stopped para que los servicios
+#   persistan entre reboots sin necesidad de docker compose up manual
+# - Se mantiene el proyecto (-p mlops) para coexistir con los
+#   contenedores temporales que crea el runner durante CI
 
 networks:
   mlops-net:
     driver: bridge
 
 volumes:
-  mlflow-data:
+  mlflow-data:   # persiste entre deploys y reboots
 
 services:
 
   mlflow:
-    image: ${REGISTRY_IMAGE:-mlops}/mlflow:${IMAGE_TAG:-latest}
     build: ./mlflow
     container_name: mlflow-server
+    restart: unless-stopped          # NUEVO: persiste entre reboots
     ports:
       - "5001:5001"
     volumes:
@@ -30,7 +33,6 @@ services:
       - mlops-net
 
   model-trainer:
-    image: ${REGISTRY_IMAGE:-mlops}/model-trainer:${IMAGE_TAG:-latest}
     build: ./model-trainer
     container_name: model-trainer
     environment:
@@ -45,9 +47,9 @@ services:
       - mlops-net
 
   inference-api:
-    image: ${REGISTRY_IMAGE:-mlops}/inference-api:${IMAGE_TAG:-latest}
     build: ./inference-api
     container_name: inference-api
+    restart: unless-stopped          # NUEVO
     ports:
       - "8000:8000"
     environment:
@@ -69,9 +71,9 @@ services:
       - mlops-net
 
   drift-detector:
-    image: ${REGISTRY_IMAGE:-mlops}/drift-detector:${IMAGE_TAG:-latest}
     build: ./drift-detector
     container_name: drift-detector
+    restart: unless-stopped          # NUEVO
     environment:
       MLFLOW_TRACKING_URI:       http://mlflow:5001
       INFERENCE_API_URL:         http://inference-api:8000
@@ -89,8 +91,8 @@ services:
     networks:
       - mlops-net
 
+  # test-runner: sin restart — se ejecuta manualmente o desde CI
   test-runner:
-    image: ${REGISTRY_IMAGE:-mlops}/test-runner:${IMAGE_TAG:-latest}
     build: ./tests
     container_name: test-runner
     environment:
@@ -103,8 +105,6 @@ services:
       GATE_MAX_LATENCY_MS: "500"
     volumes:
       - mlflow-data:/mlflow
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       mlflow:
         condition: service_healthy
@@ -112,9 +112,9 @@ services:
       - mlops-net
 
   nginx:
-    image: ${REGISTRY_IMAGE:-mlops}/nginx:${IMAGE_TAG:-latest}
     build: ./nginx
     container_name: nginx-proxy
+    restart: unless-stopped          # NUEVO
     ports:
       - "80:80"
     depends_on:
