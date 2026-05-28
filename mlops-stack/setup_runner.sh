@@ -5,7 +5,7 @@
 # Instala el self-hosted GitHub Actions runner en la misma máquina
 # donde corren los contenedores Docker del stack MLOps.
 #
-# Todo en una sola máquina:
+# Todo en una sola máquina JFCALDER:
 #   ┌─────────────────────────────────────────┐
 #   │            Host Linux                   │
 #   │  ┌──────────────────────────────────┐   │
