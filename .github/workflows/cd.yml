@@ -35,13 +35,12 @@ jobs:
       # Copiamos al directorio permanente del host donde vive el stack.
       - name: Sync files to deploy directory
         run: |
-          sudo mkdir -p ${{ env.DEPLOY_DIR }}
-          sudo rsync -av --delete \
+          mkdir -p ${{ env.DEPLOY_DIR }}
+          rsync -av --delete \
             --exclude='.git/' \
             --exclude='__pycache__/' \
             --exclude='*.pyc' \
             mlops-stack/ ${{ env.DEPLOY_DIR }}/
-          sudo chown -R $USER:$USER ${{ env.DEPLOY_DIR }}
           echo "Files synced to ${{ env.DEPLOY_DIR }} ✓"
 
       # ── Build de imágenes con el código actualizado ────────────────────
