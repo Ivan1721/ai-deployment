@@ -59,9 +59,8 @@ def df():
                 ids=[f"{s}-{t}" for _, s, t, _ in ALL_MODELS])
 def model_ctx(request):
     """Loads one of the 8 production models from MLflow."""
-    import mlflow.sklearn
-    mlflow.sklearn.mlflow.set_tracking_uri(MLFLOW_URI)
     import mlflow
+    import mlflow.sklearn
     mlflow.set_tracking_uri(MLFLOW_URI)
 
     scenario_id, scenario_label, target_alias, target_col = request.param
