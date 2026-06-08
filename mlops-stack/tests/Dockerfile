@@ -24,6 +24,7 @@ COPY test_data.py .
 COPY test_model.py .
 COPY test_api.py .
 COPY test_performance_drift.py .
+COPY ../drift-detector/performance_drift_detector.py .
 
 RUN chmod +x /entrypoint.sh
 
