@@ -25,7 +25,7 @@ jobs:
 
       - name: Lint Python
         run: |
-          pip install flake8 --quiet
+          pip install flake8 --quiet --break-system-packages
           flake8 mlops-stack/model-trainer/train.py \
                  mlops-stack/inference-api/app.py \
                  mlops-stack/drift-detector/detector.py \
