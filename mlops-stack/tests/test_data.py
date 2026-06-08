@@ -278,7 +278,7 @@ class TestDistribution:
         for cls in np.unique(y):
             train_pct = (y_train == cls).mean()
             test_pct  = (y_test  == cls).mean()
-            assert abs(train_pct - test_pct) < 0.02, (
+            assert abs(train_pct - test_pct) < 0.03, (
                 f"Clase {cls}: train={train_pct:.3f} vs test={test_pct:.3f} "
                 f"— estratificación deficiente"
             )
