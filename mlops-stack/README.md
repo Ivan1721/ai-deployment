@@ -100,6 +100,40 @@ curl -X POST http://localhost:8000/predict \
 - **Hot-reload**: `POST /reload` recarga el modelo sin reiniciar el contenedor
 - **Health checks**: Docker espera a que cada servicio esté sano antes de continuar
 - **Volúmenes persistentes**: la DB y artefactos de MLFlow sobreviven reinicios
+- **Data Drift Detection**: Detecta cambios en distribuciones de features (KS test) y predicciones (Chi2)
+- **Performance Drift Detection**: Monitorea caídas en Accuracy, Precision, Recall, F1 usando t-tests y EWMA
+- **Quality Gates**: Valida métricas antes de promoción a Production
+- **Automated Testing**: Suite QA con tests de data, model, API y performance drift
+
+## Monitoreo de Drifts
+
+### Data Drift
+Detecta cambios en la distribución de features usando Kolmogorov-Smirnov test y distribución de predicciones con Chi-square test.
+
+### Performance Drift  
+Monitorea métricas de clasificación:
+- **Accuracy**: Exactitud general
+- **Precision**: Precisión weighted, macro, micro
+- **Recall**: Recall weighted, macro, micro  
+- **F1-score**: F1 weighted, macro, micro
+
+**Métodos estadísticos:**
+- **t-test**: Compara media de ventana actual vs baseline (requiere >= 5 samples)
+- **EWMA**: Exponential Moving Average detecta tendencias sostenidas
+- **Effect Size**: Cambio absoluto > umbral (default 5%)
+
+**Configuración (variables de entorno):**
+```bash
+ENABLE_PERFORMANCE_DRIFT=true           # Habilitar detección
+PERF_DRIFT_EFFECT_SIZE=0.05             # Cambio mínimo (5%)
+PERF_DRIFT_P_VALUE=0.05                 # Significancia estadística
+PERF_DRIFT_CONSECUTIVE=2                # Ventanas consecutivas con drift
+```
+
+**Triggers:**
+- Se logean métricas en MLFlow bajo experimento `performance-drift-monitoring`
+- Si >= 2 métricas muestran drift en N ventanas consecutivas → trigger retraining automático
+- Detención correcta de falsas alarmas con umbrales ajustables
 
 ## Actualizar el modelo
 
@@ -132,12 +166,27 @@ mlops-stack/
 ├── model-trainer/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   └── train.py            ← entrenamiento + registro en MLFlow
+│   └── train.py                           ← entrenamiento + registro en MLFlow
 ├── inference-api/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   └── app.py              ← FastAPI + carga desde Model Registry
-└── nginx/
+│   └── app.py                             ← FastAPI + carga desde Model Registry
+├── drift-detector/
+│   ├── Dockerfile
+│   ├── detector.py                        ← Data drift + Performance drift detection
+│   ├── performance_drift_detector.py      ← PerformanceDriftDetector class
+│   ├── retrain_trigger.py                 ← Trigger retraining on drift
+│   └── requirements.txt
+├── nginx/
+│   ├── Dockerfile
+│   └── nginx.conf
+└── tests/
     ├── Dockerfile
-    └── nginx.conf
+    ├── run_tests.py                       ← Orquestador de pruebas (4 niveles)
+    ├── test_data.py                       ← Level 1: Data validation tests
+    ├── test_model.py                      ← Level 2: Model quality gates
+    ├── test_api.py                        ← Level 3: API tests
+    ├── test_performance_drift.py          ← Level 4: Performance drift tests
+    ├── test_performance_drift_integration.py ← Integration tests
+    └── entrypoint.sh
 ```

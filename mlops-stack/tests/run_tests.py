@@ -173,6 +173,21 @@ def main():
         log.warning("InferenceAPI not reachable — skipping API tests")
         results["api"] = {"passed": 0, "failed": 0, "total": 0, "duration": 0, "ok": True}
 
+    # ── Nivel 4: Performance Drift Tests ────────────────────────────────────
+    log.info("")
+    log.info("━━━ LEVEL 4: PERFORMANCE DRIFT TESTS ━━━━━━━━━━━━━━━━━")
+    if api_ok:
+        r = run_pytest("test_performance_drift.py", extra_env={
+            "MLFLOW_TRACKING_URI": MLFLOW_URI,
+        })
+        results["performance_drift"] = r
+        if not r["ok"]:
+            all_ok = False
+            log.error("Performance drift tests FAILED")
+    else:
+        log.warning("InferenceAPI not reachable — skipping performance drift tests")
+        results["performance_drift"] = {"passed": 0, "failed": 0, "total": 0, "duration": 0, "ok": True}
+
     log_mlflow(results, all_ok)
     print_summary(results, all_ok)
     sys.exit(0 if all_ok else 1)

@@ -83,6 +83,10 @@ services:
       CONSECUTIVE_DRIFT_WINDOWS: "2"
       WINDOW_SIZE:               "30"
       CHECK_INTERVAL_S:          "30"
+      ENABLE_PERFORMANCE_DRIFT:  "true"
+      PERF_DRIFT_EFFECT_SIZE:    "0.05"
+      PERF_DRIFT_P_VALUE:        "0.05"
+      PERF_DRIFT_CONSECUTIVE:    "2"
     volumes:
       - mlflow-data:/mlflow
     depends_on:
