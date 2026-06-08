@@ -1,0 +1,35 @@
+# Force LF for all files by default
+* text=auto eol=lf
+
+# Shell scripts always LF — CRLF breaks shebangs in Linux containers
+*.sh text eol=lf
+
+# Docker files always LF
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+docker-compose*.yml text eol=lf
+
+# Python always LF
+*.py text eol=lf
+
+# Config / data text files
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.cfg text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+
+# Binary — never touch line endings
+*.csv binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
