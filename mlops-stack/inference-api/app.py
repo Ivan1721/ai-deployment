@@ -1,15 +1,15 @@
 """
-app.py  ─  Inference API
-────────────────────────
-Sirve en producción el modelo registrado en MLFlow Model Registry.
-Carga el modelo directamente desde el filesystem compartido.
+app.py  -  Inference API
+------------------------
+Serves the 8 HRI harvesting models (2 scenarios x 4 targets) from MLflow.
+Accepts operational configuration and returns all 4 regression targets.
 """
 
 import os
 import time
 import logging
 from contextlib import asynccontextmanager
-from typing import List
+from typing import Dict
 
 import mlflow
 import mlflow.sklearn
@@ -22,120 +22,147 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(me
 log = logging.getLogger(__name__)
 
 TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
-MODEL_NAME   = os.environ.get("MODEL_NAME",  "iris-classifier")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE", "Production")
 
-TARGET_NAMES  = ["setosa", "versicolor", "virginica"]
-FEATURE_NAMES = [
-    "sepal length (cm)", "sepal width (cm)",
-    "petal length (cm)", "petal width (cm)",
-]
+SCENARIOS = {0: "HumanOnly", 1: "WithRobot"}
+TARGETS = {
+    "TotalRecollected": "TotalRecollectedCrops_crop_units",
+    "CargoZoneProd":    "TotalProductionCargoZone_crop_units",
+    "TotalWorkload":    "TotalHumanWorkload_kcal",
+    "AvgProduction":    "AverageHumanProduction_crop_units",
+}
+ACTIVITY_VALUES = ["harv_ground", "harv_ladder", "harv_mixed", "harv_picker"]
+FEATURE_NAMES   = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
 
-state: dict = {"model": None, "model_version": None, "loaded_at": None}
+state: Dict = {"models": {}, "loaded_at": None}
 
 
-def load_model(retries: int = 20, delay: int = 6):
+def _encode_activity(activity: str) -> Dict[str, int]:
+    return {
+        "Act_Ladder": int(activity == "harv_ladder"),
+        "Act_Mixed":  int(activity == "harv_mixed"),
+        "Act_Picker": int(activity == "harv_picker"),
+    }
+
+
+def load_all_models(retries: int = 20, delay: int = 6) -> None:
     mlflow.set_tracking_uri(TRACKING_URI)
-    model_uri = f"models:/{MODEL_NAME}/{MODEL_STAGE}"
+    loaded: Dict = {}
+    for scenario_label in SCENARIOS.values():
+        loaded[scenario_label] = {}
+        for target_alias in TARGETS:
+            model_name = f"hri-{scenario_label}-{target_alias}"
+            model_uri  = f"models:/{model_name}/{MODEL_STAGE}"
+            for attempt in range(1, retries + 1):
+                try:
+                    loaded[scenario_label][target_alias] = mlflow.sklearn.load_model(model_uri)
+                    log.info(f"Loaded {model_name}")
+                    break
+                except Exception as e:
+                    log.warning(f"  {model_name} attempt {attempt}/{retries}: {e}")
+                    if attempt < retries:
+                        time.sleep(delay)
+            else:
+                log.error(f"Failed to load {model_name} after {retries} attempts")
 
-    for attempt in range(1, retries + 1):
-        try:
-            log.info(f"Loading '{model_uri}' … attempt {attempt}/{retries}")
-            model = mlflow.sklearn.load_model(model_uri)
-
-            from mlflow import MlflowClient
-            client   = MlflowClient(TRACKING_URI)
-            versions = client.get_latest_versions(MODEL_NAME, stages=[MODEL_STAGE])
-            version  = versions[0].version if versions else "?"
-
-            state["model"]         = model
-            state["model_version"] = version
-            state["loaded_at"]     = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            log.info(f"Model loaded ✓  version={version}")
-            return
-        except Exception as e:
-            log.warning(f"Could not load model: {e}")
-            if attempt < retries:
-                time.sleep(delay)
-
-    log.error("Failed to load model after all retries.")
+    state["models"]    = loaded
+    state["loaded_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    log.info(f"Models loaded: {sum(len(v) for v in loaded.values())}/8")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    load_model()
+    load_all_models()
     yield
 
 
 app = FastAPI(
-    title="MLOps Inference API",
-    description="Inference API backed by MLFlow Model Registry",
-    version="1.0.0",
+    title="HRI Harvesting Inference API",
+    description="Predicts harvesting productivity and workload for Human-Only and Human-Robot scenarios.",
+    version="2.0.0",
     lifespan=lifespan,
 )
-
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 class PredictRequest(BaseModel):
-    instances: List[List[float]] = Field(
-        ..., example=[[5.1, 3.5, 1.4, 0.2], [6.7, 3.0, 5.2, 2.3]]
-    )
+    scenario: int = Field(..., description="0=Human-Only, 1=Human-Robot", ge=0, le=1)
+    workers:  int = Field(..., description="Number of human workers", ge=1, le=12)
+    crop_row: int = Field(..., description="Crop row (1-3)", ge=1, le=3)
+    rand_pos: int = Field(..., description="Random initial positions (0=Fixed, 1=Random)", ge=0, le=1)
+    activity: str = Field(..., description="harv_ground | harv_ladder | harv_mixed | harv_picker")
 
-class Prediction(BaseModel):
-    class_id: int; class_name: str; probability: float
+    class Config:
+        json_schema_extra = {
+            "example": {"scenario": 0, "workers": 6, "crop_row": 2, "rand_pos": 0, "activity": "harv_ground"}
+        }
+
 
 class PredictResponse(BaseModel):
-    predictions: List[Prediction]
-    model_name: str; model_version: str; model_stage: str
+    scenario_label:      str
+    total_recollected:   float
+    cargo_zone_prod:     float
+    total_workload_kcal: float
+    avg_production:      float
+    model_stage:         str
+    loaded_at:           str
 
 
 @app.get("/health")
 def health():
+    total = sum(len(v) for v in state["models"].values())
     return {
-        "status":        "ok" if state["model"] is not None else "degraded",
-        "model_name":    MODEL_NAME,
-        "model_version": state["model_version"],
+        "status":        "ok" if total == 8 else "degraded",
+        "models_loaded": total,
         "model_stage":   MODEL_STAGE,
         "loaded_at":     state["loaded_at"],
     }
 
+
 @app.get("/info")
 def info():
-    return {"model_name": MODEL_NAME, "model_stage": MODEL_STAGE,
-            "model_version": state["model_version"],
-            "features": FEATURE_NAMES, "classes": TARGET_NAMES}
+    return {
+        "scenarios":   [{"id": k, "label": v} for k, v in SCENARIOS.items()],
+        "targets":     list(TARGETS.keys()),
+        "features":    FEATURE_NAMES,
+        "activities":  ACTIVITY_VALUES,
+        "model_stage": MODEL_STAGE,
+    }
+
 
 @app.post("/predict", response_model=PredictResponse)
-def predict(request: PredictRequest):
-    if state["model"] is None:
-        raise HTTPException(503, "Model not loaded yet.")
-    if len(request.instances) == 0:
-        raise HTTPException(422, "instances list must not be empty.")
-    for i, row in enumerate(request.instances):
-        if len(row) != 4:
-            raise HTTPException(422, f"Instance {i}: expected 4 features, got {len(row)}.")
-    X = pd.DataFrame(request.instances, columns=FEATURE_NAMES)
-    class_ids     = state["model"].predict(X)
-    probabilities = state["model"].predict_proba(X)
-    predictions   = [
-        Prediction(
-            class_id=int(cid),
-            class_name=TARGET_NAMES[int(cid)],
-            probability=round(float(probabilities[i][int(cid)]), 4),
-        )
-        for i, cid in enumerate(class_ids)
-    ]
+def predict(req: PredictRequest):
+    if req.activity not in ACTIVITY_VALUES:
+        raise HTTPException(422, f"activity must be one of {ACTIVITY_VALUES}")
+
+    scenario_label = SCENARIOS[req.scenario]
+    models = state["models"].get(scenario_label, {})
+    if not models:
+        raise HTTPException(503, f"Models for scenario '{scenario_label}' not loaded yet.")
+
+    enc = _encode_activity(req.activity)
+    X   = pd.DataFrame([[
+        req.workers, req.crop_row, req.rand_pos,
+        enc["Act_Ladder"], enc["Act_Mixed"], enc["Act_Picker"],
+    ]], columns=FEATURE_NAMES).values
+
+    preds = {alias: round(float(model.predict(X)[0]), 4) for alias, model in models.items()}
+
     return PredictResponse(
-        predictions=predictions,
-        model_name=MODEL_NAME,
-        model_version=state["model_version"] or "?",
+        scenario_label=scenario_label,
+        total_recollected=preds.get("TotalRecollected", 0.0),
+        cargo_zone_prod=preds.get("CargoZoneProd", 0.0),
+        total_workload_kcal=preds.get("TotalWorkload", 0.0),
+        avg_production=preds.get("AvgProduction", 0.0),
         model_stage=MODEL_STAGE,
+        loaded_at=state["loaded_at"] or "",
     )
 
+
 @app.post("/reload")
-def reload_model():
-    load_model(retries=3, delay=2)
-    if state["model"] is None:
-        raise HTTPException(503, "Reload failed.")
-    return {"status": "reloaded", "model_version": state["model_version"]}
+def reload_models():
+    load_all_models(retries=3, delay=2)
+    total = sum(len(v) for v in state["models"].values())
+    if total == 0:
+        raise HTTPException(503, "Reload failed -- no models loaded.")
+    return {"status": "reloaded", "models_loaded": total}

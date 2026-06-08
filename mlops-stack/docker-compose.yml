@@ -38,8 +38,10 @@ services:
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
       MLFLOW_ARTIFACT_ROOT: /mlflow/artifacts
+      DATASET_PATH: /data/simulation_all.csv
     volumes:
       - mlflow-data:/mlflow
+      - ./data:/data:ro
     depends_on:
       mlflow:
         condition: service_healthy
@@ -54,10 +56,11 @@ services:
       - "8000:8000"
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
-      MODEL_NAME: iris-classifier
       MODEL_STAGE: Production
+      DATASET_PATH: /data/simulation_all.csv
     volumes:
       - mlflow-data:/mlflow
+      - ./data:/data:ro
     depends_on:
       mlflow:
         condition: service_healthy
@@ -77,9 +80,8 @@ services:
     environment:
       MLFLOW_TRACKING_URI:       http://mlflow:5001
       INFERENCE_API_URL:         http://inference-api:8000
-      MODEL_NAME:                iris-classifier
+      DATASET_PATH:              /data/simulation_all.csv
       KS_P_VALUE_THRESHOLD:      "0.05"
-      CHI2_P_VALUE_THRESHOLD:    "0.05"
       CONSECUTIVE_DRIFT_WINDOWS: "2"
       WINDOW_SIZE:               "30"
       CHECK_INTERVAL_S:          "30"
@@ -89,6 +91,7 @@ services:
       PERF_DRIFT_CONSECUTIVE:    "2"
     volumes:
       - mlflow-data:/mlflow
+      - ./data:/data:ro
     depends_on:
       mlflow:
         condition: service_healthy
@@ -102,13 +105,13 @@ services:
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
       INFERENCE_API_URL:   http://inference-api:8000
-      MODEL_NAME:          iris-classifier
       MODEL_STAGE:         Production
-      GATE_MIN_ACCURACY:   "0.90"
-      GATE_MIN_F1:         "0.90"
+      DATASET_PATH:        /data/simulation_all.csv
+      GATE_MIN_R2:         "0.70"
       GATE_MAX_LATENCY_MS: "500"
     volumes:
       - mlflow-data:/mlflow
+      - ./data:/data:ro
     depends_on:
       mlflow:
         condition: service_healthy
