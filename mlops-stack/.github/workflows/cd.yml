@@ -1,0 +1,134 @@
+# .github/workflows/cd.yml
+#
+# CAMBIO vs versión anterior:
+# - runs-on: self-hosted  (antes: ubuntu-latest con SSH remoto)
+# - Sin GHCR, sin SSH, sin push de imágenes a registry externo
+# - El runner corre en la misma máquina que los contenedores
+# - El deploy es: docker compose up -d con las imágenes recién construidas
+# - El stack corre en modo "permanente" en el host — el CD lo actualiza
+
+name: CD — Build & Deploy (self-hosted)
+
+on:
+  push:
+    branches: [main]
+
+env:
+  DEPLOY_DIR: /opt/mlops-stack   # directorio permanente en el host
+  COMPOSE_PROJECT: mlops         # nombre del proyecto docker compose
+
+jobs:
+
+  deploy:
+    name: Deploy to local stack
+    runs-on: self-hosted
+    # Serializar deploys: si hay uno corriendo, esperar antes de iniciar otro
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Sincronizar archivos al directorio permanente ──────────────────
+      # El runner hace checkout en su workspace temporal.
+      # Copiamos al directorio permanente del host donde vive el stack.
+      - name: Sync files to deploy directory
+        run: |
+          sudo mkdir -p ${{ env.DEPLOY_DIR }}
+          sudo rsync -av --delete \
+            --exclude='.git/' \
+            --exclude='__pycache__/' \
+            --exclude='*.pyc' \
+            ./ ${{ env.DEPLOY_DIR }}/
+          sudo chown -R $USER:$USER ${{ env.DEPLOY_DIR }}
+          echo "Files synced to ${{ env.DEPLOY_DIR }} ✓"
+
+      # ── Build de imágenes con el código actualizado ────────────────────
+      - name: Build updated images
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose -p ${{ env.COMPOSE_PROJECT }} build --parallel
+          echo "Images built ✓"
+
+      # ── Asegurar que MLFlow está corriendo ─────────────────────────────
+      - name: Ensure MLFlow is running
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose -p ${{ env.COMPOSE_PROJECT }} up -d mlflow
+          timeout 120 bash -c \
+            'until docker compose -p mlops ps mlflow | grep -q "(healthy)"; do sleep 3; done'
+          echo "MLFlow healthy ✓"
+
+      # ── Entrenar si no hay modelo en Production ────────────────────────
+      # Si el modelo ya existe (volumen persistente), el trainer lo detecta
+      # y no sobreescribe — solo registra si no hay versión en Production.
+      - name: Train model if needed
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          MODEL_EXISTS=$(docker compose -p ${{ env.COMPOSE_PROJECT }} run --rm \
+            -e MLFLOW_TRACKING_URI=http://mlflow:5001 \
+            model-trainer python -c "
+          import mlflow, os
+          mlflow.set_tracking_uri(os.environ.get('MLFLOW_TRACKING_URI'))
+          from mlflow import MlflowClient
+          c = MlflowClient()
+          try:
+              vs = c.get_latest_versions('iris-classifier', stages=['Production'])
+              print('exists' if vs else 'missing')
+          except Exception:
+              print('missing')
+          " 2>/dev/null || echo "missing")
+
+          if echo "$MODEL_EXISTS" | grep -q "missing"; then
+            echo "No model in Production — training..."
+            docker compose -p ${{ env.COMPOSE_PROJECT }} run --rm model-trainer
+          else
+            echo "Model already in Production — skipping training"
+          fi
+
+      # ── Rolling update: inference-api primero ─────────────────────────
+      # Actualizar la API antes de cualquier otro servicio para minimizar
+      # el tiempo sin servicio. --no-deps evita reiniciar dependencias.
+      - name: Update inference-api (zero-downtime)
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose -p ${{ env.COMPOSE_PROJECT }} up -d \
+            --no-deps --build inference-api
+          sleep 8
+          curl -sf http://localhost:8000/health > /dev/null \
+            && echo "inference-api healthy after update ✓" \
+            || (echo "inference-api UNHEALTHY — rollback needed" && exit 1)
+
+      # ── Actualizar resto del stack ─────────────────────────────────────
+      - name: Update remaining services
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose -p ${{ env.COMPOSE_PROJECT }} up -d \
+            --no-deps drift-detector nginx
+          docker compose -p ${{ env.COMPOSE_PROJECT }} ps
+          echo "Stack updated ✓"
+
+      # ── Post-deploy: suite QA completa ─────────────────────────────────
+      - name: Post-deploy QA
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose -p ${{ env.COMPOSE_PROJECT }} run --rm \
+            -e MLFLOW_TRACKING_URI=http://mlflow:5001 \
+            -e INFERENCE_API_URL=http://inference-api:8000 \
+            test-runner
+
+      # ── Resumen del deploy ─────────────────────────────────────────────
+      - name: Deploy summary
+        if: always()
+        run: |
+          echo "## Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy dir:** ${{ env.DEPLOY_DIR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Stack status" >> $GITHUB_STEP_SUMMARY
+          docker compose -p ${{ env.COMPOSE_PROJECT }} ps \
+            --format "table {{.Name}}\t{{.Status}}" \
+            >> $GITHUB_STEP_SUMMARY || true

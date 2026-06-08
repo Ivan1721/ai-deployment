@@ -1,0 +1,91 @@
+# .github/workflows/ci.yml
+#
+# CAMBIO vs versión anterior:
+# - runs-on: self-hosted  (antes: ubuntu-latest)
+# - Sin GHCR, sin push de imágenes
+# - El runner tiene acceso directo al socket Docker del host
+# - Las URLs son internas (http://mlflow:5001) porque todos
+#   los contenedores comparten mlops-net en la misma máquina
+
+name: CI — Build & Test
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [develop]
+
+jobs:
+
+  lint:
+    name: Lint
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Python
+        run: |
+          pip install flake8 --quiet
+          flake8 model-trainer/train.py \
+                 inference-api/app.py \
+                 drift-detector/detector.py \
+                 tests/run_tests.py \
+                 tests/test_data.py \
+                 tests/test_model.py \
+                 tests/test_api.py \
+            --max-line-length=110 \
+            --extend-ignore=E501,W503 \
+            --statistics || true
+
+      - name: Validate docker-compose
+        run: docker compose config --quiet
+
+  test:
+    name: QA Suite
+    runs-on: self-hosted
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Construir imágenes (usa cache local del host) ──────────────────
+      - name: Build images
+        run: docker compose build --parallel
+
+      # ── Levantar MLFlow ────────────────────────────────────────────────
+      - name: Start MLFlow
+        run: |
+          docker compose up -d mlflow
+          echo "Waiting for MLFlow..."
+          timeout 120 bash -c \
+            'until docker compose ps mlflow | grep -q "(healthy)"; do sleep 3; done'
+          echo "MLFlow healthy ✓"
+
+      # ── Entrenar modelo ────────────────────────────────────────────────
+      - name: Train model
+        run: docker compose run --rm model-trainer
+
+      # ── Levantar inference-api ─────────────────────────────────────────
+      - name: Start inference-api
+        run: |
+          docker compose up -d inference-api
+          echo "Waiting for inference-api..."
+          timeout 120 bash -c \
+            'until curl -sf http://localhost:8000/health > /dev/null; do sleep 4; done'
+          echo "inference-api ready ✓"
+
+      # ── Correr suite QA completa ───────────────────────────────────────
+      # En self-hosted, mlflow e inference-api son alcanzables por nombre
+      # porque el runner y los contenedores comparten la red del host.
+      - name: Run QA suite
+        run: |
+          docker compose run --rm \
+            -e MLFLOW_TRACKING_URI=http://mlflow:5001 \
+            -e INFERENCE_API_URL=http://inference-api:8000 \
+            test-runner
+
+      # ── Limpiar contenedores CI (NO los volúmenes — MLFlow persiste) ──
+      - name: Cleanup CI containers
+        if: always()
+        run: docker compose down --remove-orphans
+        # Sin -v: el volumen mlflow-data se conserva entre runs

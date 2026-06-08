@@ -1,15 +1,24 @@
+# CAMBIO vs versión anterior con CI/CD remoto:
+# - Se elimina REGISTRY_IMAGE e IMAGE_TAG (no hay registry externo)
+# - Las imágenes siempre se construyen localmente con build:
+# - Se agrega restart: unless-stopped para que los servicios
+#   persistan entre reboots sin necesidad de docker compose up manual
+# - Se mantiene el proyecto (-p mlops) para coexistir con los
+#   contenedores temporales que crea el runner durante CI
+
 networks:
   mlops-net:
     driver: bridge
 
 volumes:
-  mlflow-data:
+  mlflow-data:   # persiste entre deploys y reboots
 
 services:
 
   mlflow:
     build: ./mlflow
     container_name: mlflow-server
+    restart: unless-stopped          # NUEVO: persiste entre reboots
     ports:
       - "5001:5001"
     volumes:
@@ -40,6 +49,7 @@ services:
   inference-api:
     build: ./inference-api
     container_name: inference-api
+    restart: unless-stopped          # NUEVO
     ports:
       - "8000:8000"
     environment:
@@ -51,8 +61,6 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
-    # Health check permisivo: la API puede estar "degraded" (sin modelo aún)
-    # y seguir siendo válida como contenedor corriendo
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 10s
@@ -65,6 +73,7 @@ services:
   drift-detector:
     build: ./drift-detector
     container_name: drift-detector
+    restart: unless-stopped          # NUEVO
     environment:
       MLFLOW_TRACKING_URI:       http://mlflow:5001
       INFERENCE_API_URL:         http://inference-api:8000
@@ -74,9 +83,32 @@ services:
       CONSECUTIVE_DRIFT_WINDOWS: "2"
       WINDOW_SIZE:               "30"
       CHECK_INTERVAL_S:          "30"
+      ENABLE_PERFORMANCE_DRIFT:  "true"
+      PERF_DRIFT_EFFECT_SIZE:    "0.05"
+      PERF_DRIFT_P_VALUE:        "0.05"
+      PERF_DRIFT_CONSECUTIVE:    "2"
     volumes:
       - mlflow-data:/mlflow
-    # Solo depende de MLFlow — espera a la API por su cuenta en el código
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    networks:
+      - mlops-net
+
+  # test-runner: sin restart — se ejecuta manualmente o desde CI
+  test-runner:
+    build: ./tests
+    container_name: test-runner
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      INFERENCE_API_URL:   http://inference-api:8000
+      MODEL_NAME:          iris-classifier
+      MODEL_STAGE:         Production
+      GATE_MIN_ACCURACY:   "0.90"
+      GATE_MIN_F1:         "0.90"
+      GATE_MAX_LATENCY_MS: "500"
+    volumes:
+      - mlflow-data:/mlflow
     depends_on:
       mlflow:
         condition: service_healthy
@@ -86,6 +118,7 @@ services:
   nginx:
     build: ./nginx
     container_name: nginx-proxy
+    restart: unless-stopped          # NUEVO
     ports:
       - "80:80"
     depends_on:
