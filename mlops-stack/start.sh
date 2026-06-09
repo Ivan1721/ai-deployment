@@ -54,8 +54,8 @@ docker compose run --rm model-trainer
 echo "▶ Starting Inference API & Nginx…"
 docker compose up -d inference-api nginx
 
-echo "▶ Waiting for Inference API… (máx 90s)"
-MAX=90; ELAPSED=0
+echo "▶ Waiting for Inference API… (máx 180s)"
+MAX=180; ELAPSED=0
 until curl -sf http://localhost:$API_PORT/health > /dev/null 2>&1; do
     if [ $ELAPSED -ge $MAX ]; then
         echo ""
