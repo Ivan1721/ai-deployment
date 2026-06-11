@@ -2,17 +2,19 @@
 test_model.py  ─  Nivel 2: Model Tests + Quality Gates  (HRI Regression)
 Tests all 8 models: 2 scenarios x 4 targets.
 """
-import os, pytest
+import os, pytest, json
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split, cross_val_score, KFold
-from sklearn.metrics import r2_score
+from sklearn.metrics import (r2_score, mean_squared_error, mean_absolute_error,
+                              max_error as sklearn_max_error)
 from sklearn.dummy import DummyRegressor
 
 MLFLOW_URI   = os.environ.get("MLFLOW_TRACKING_URI", "http://host.docker.internal:5001")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE",  "Production")
 DATASET_PATH = os.environ.get("DATASET_PATH", "/data/simulation_all.csv")
-MIN_R2       = float(os.environ.get("GATE_MIN_R2", "0.70"))
+MIN_R2       = float(os.environ.get("GATE_MIN_R2",    "0.70"))
+MAX_SMAPE    = float(os.environ.get("GATE_MAX_SMAPE", "20.0"))   # %
 
 SCENARIOS = {0: "HumanOnly", 1: "WithRobot"}
 TARGETS = {
@@ -46,6 +48,13 @@ def _load_df():
 
 def _model_name(scenario_label: str, target_alias: str) -> str:
     return f"hri-{scenario_label}-{target_alias}"
+
+
+def _smape(y_true, y_pred) -> float:
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    denom  = (np.abs(y_true) + np.abs(y_pred)) / 2.0
+    return float(np.mean(np.where(denom == 0, 0.0, np.abs(y_pred - y_true) / denom)) * 100)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -92,6 +101,22 @@ class TestPerformanceGates:
         r2 = r2_score(y_te, model.predict(X_te))
         assert r2 >= MIN_R2, (
             f"GATE FAILED: {scenario_label}-{target_alias}  R2={r2:.4f} < {MIN_R2}"
+        )
+
+    def test_smape_gate(self, splits, model_ctx):
+        model, _, X_te, _, y_te = splits
+        _, _, scenario_label, target_alias, _ = model_ctx
+        s = _smape(y_te, model.predict(X_te))
+        assert s < MAX_SMAPE, (
+            f"GATE FAILED: {scenario_label}-{target_alias}  sMAPE={s:.2f}% >= {MAX_SMAPE}%"
+        )
+
+    def test_max_error_finite(self, splits, model_ctx):
+        model, _, X_te, _, y_te = splits
+        _, _, scenario_label, target_alias, _ = model_ctx
+        me = sklearn_max_error(y_te, model.predict(X_te))
+        assert np.isfinite(me), (
+            f"{scenario_label}-{target_alias}: max_error is not finite ({me})"
         )
 
     def test_cv_stability(self, model_ctx, df):
@@ -163,6 +188,41 @@ class TestMLFlowRegistry:
         try:
             vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
             assert len(vs) > 0, f"No versions of '{name}' in stage '{MODEL_STAGE}'"
+        except Exception as e:
+            pytest.skip(f"MLFlow not available: {e}")
+
+    def test_all_metrics_logged(self, model_ctx):
+        import mlflow
+        from mlflow import MlflowClient
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        client = MlflowClient(MLFLOW_URI)
+        _, _, scenario_label, target_alias, _ = model_ctx
+        name = _model_name(scenario_label, target_alias)
+        try:
+            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
+            if not vs:
+                pytest.skip("No production version found")
+            run = client.get_run(vs[0].run_id)
+            m   = run.data.metrics
+            for key in ("ho_r2", "ho_rmse", "ho_mae", "ho_smape", "ho_max_error"):
+                assert key in m, f"Metric '{key}' not logged for {name}"
+        except Exception as e:
+            pytest.skip(f"MLFlow not available: {e}")
+
+    def test_feature_ranking_artifact(self, model_ctx):
+        import mlflow
+        from mlflow import MlflowClient
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        client = MlflowClient(MLFLOW_URI)
+        _, _, scenario_label, target_alias, _ = model_ctx
+        name = _model_name(scenario_label, target_alias)
+        try:
+            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
+            if not vs:
+                pytest.skip("No production version found")
+            artifacts = [a.path for a in client.list_artifacts(vs[0].run_id)]
+            assert "feature_ranking.json" in artifacts, \
+                f"feature_ranking.json not found for {name}. Found: {artifacts}"
         except Exception as e:
             pytest.skip(f"MLFlow not available: {e}")
 

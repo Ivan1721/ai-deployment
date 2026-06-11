@@ -37,14 +37,20 @@ class PerformanceDriftDetector:
 
     @staticmethod
     def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
-        """Calculate regression metrics: R², RMSE, MAE."""
-        from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+        """Calculate regression metrics: R², RMSE, MAE, sMAPE, Max Error."""
+        from sklearn.metrics import (r2_score, mean_squared_error,
+                                     mean_absolute_error, max_error as sk_max_error)
         y_true = np.asarray(y_true, dtype=float)
         y_pred = np.asarray(y_pred, dtype=float)
+        denom  = (np.abs(y_true) + np.abs(y_pred)) / 2.0
+        smape  = float(np.mean(np.where(denom == 0, 0.0,
+                                        np.abs(y_pred - y_true) / denom)) * 100)
         return {
-            "r2":   float(r2_score(y_true, y_pred)),
-            "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
-            "mae":  float(mean_absolute_error(y_true, y_pred)),
+            "r2":        float(r2_score(y_true, y_pred)),
+            "rmse":      float(np.sqrt(mean_squared_error(y_true, y_pred))),
+            "mae":       float(mean_absolute_error(y_true, y_pred)),
+            "smape":     smape,
+            "max_error": float(sk_max_error(y_true, y_pred)),
         }
 
     def detect_drift(self, current_metrics: Dict[str, float]) -> Tuple[bool, Dict]:

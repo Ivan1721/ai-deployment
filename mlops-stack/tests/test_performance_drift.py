@@ -1,7 +1,7 @@
 """
 test_performance_drift.py
 ──────────────────────────
-Unit tests for PerformanceDriftDetector with regression metrics (R², RMSE, MAE).
+Unit tests for PerformanceDriftDetector with regression metrics (R², RMSE, MAE, sMAPE, Max Error).
 """
 
 import pytest
@@ -12,7 +12,7 @@ from performance_drift_detector import PerformanceDriftDetector, PerformanceDrif
 
 @pytest.fixture
 def baseline_metrics():
-    return {"r2": 0.92, "rmse": 10.5, "mae": 7.8}
+    return {"r2": 0.92, "rmse": 10.5, "mae": 7.8, "smape": 4.5, "max_error": 28.0}
 
 
 @pytest.fixture
@@ -31,14 +31,16 @@ class TestPerformanceDriftDetectorBasics:
     def test_calculate_metrics_keys(self, stable_predictions):
         y_pred, y_true = stable_predictions
         metrics = PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
-        assert set(metrics.keys()) == {"r2", "rmse", "mae"}
+        assert set(metrics.keys()) == {"r2", "rmse", "mae", "smape", "max_error"}
 
     def test_calculate_metrics_ranges(self, stable_predictions):
         y_pred, y_true = stable_predictions
         metrics = PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
-        assert metrics["r2"]   <= 1.0
-        assert metrics["rmse"] >= 0.0
-        assert metrics["mae"]  >= 0.0
+        assert metrics["r2"]        <= 1.0
+        assert metrics["rmse"]      >= 0.0
+        assert metrics["mae"]       >= 0.0
+        assert 0.0 <= metrics["smape"] <= 200.0
+        assert metrics["max_error"] >= metrics["mae"]   # max >= mean always
 
     def test_detector_initialization(self, baseline_metrics):
         det = PerformanceDriftDetector(baseline_metrics)
@@ -164,9 +166,11 @@ class TestEdgeCases:
         y_true  = np.random.uniform(50, 200, 50)
         y_pred  = y_true.copy()
         metrics = PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
-        assert metrics["r2"]   == pytest.approx(1.0, abs=1e-6)
-        assert metrics["rmse"] == pytest.approx(0.0, abs=1e-6)
-        assert metrics["mae"]  == pytest.approx(0.0, abs=1e-6)
+        assert metrics["r2"]        == pytest.approx(1.0, abs=1e-6)
+        assert metrics["rmse"]      == pytest.approx(0.0, abs=1e-6)
+        assert metrics["mae"]       == pytest.approx(0.0, abs=1e-6)
+        assert metrics["smape"]     == pytest.approx(0.0, abs=1e-6)
+        assert metrics["max_error"] == pytest.approx(0.0, abs=1e-6)
 
 
 # ── History & EWMA ─────────────────────────────────────────────────────────────

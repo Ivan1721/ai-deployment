@@ -24,7 +24,9 @@ from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.metrics import (r2_score, mean_squared_error, mean_absolute_error,
+                             max_error as sklearn_max_error)
+from sklearn.inspection import permutation_importance
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -43,6 +45,31 @@ TARGETS = {
 SCENARIOS     = {0: "HumanOnly", 1: "WithRobot"}
 FEATURE_NAMES = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
 QUALITY_GATE  = 0.70
+
+
+# ── Metric helpers ────────────────────────────────────────────────────────────
+
+def smape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Symmetric MAPE (0–100%). Robust to near-zero targets."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    denom  = (np.abs(y_true) + np.abs(y_pred)) / 2.0
+    return float(np.mean(np.where(denom == 0, 0.0, np.abs(y_pred - y_true) / denom)) * 100)
+
+
+def feature_ranking(pipeline, X_te: np.ndarray, y_te: np.ndarray) -> dict:
+    """Permutation importance — works for all model types (linear, tree, SVM, MLP)."""
+    result = permutation_importance(pipeline, X_te, y_te,
+                                    n_repeats=10, random_state=42, scoring="r2")
+    ranks  = np.argsort(np.argsort(-result.importances_mean)) + 1  # rank 1 = most important
+    return {
+        name: {
+            "importance_mean": round(float(result.importances_mean[i]), 6),
+            "importance_std":  round(float(result.importances_std[i]),  6),
+            "rank":            int(ranks[i]),
+        }
+        for i, name in enumerate(FEATURE_NAMES)
+    }
 
 
 # ── Optional heavy packages ───────────────────────────────────────────────────
@@ -234,15 +261,24 @@ def main():
             y_pred    = winner.predict(X_te)
             model_reg = f"hri-{scenario_label}-{target_alias}"
 
+            feat_rank = feature_ranking(winner, X_te, y_te)
             metrics = {
-                "cv_r2_mean": best_cv_r2,
-                "cv_r2_std":  cv_results[best_name]["cv_r2_std"],
-                "ho_r2":      float(r2_score(y_te, y_pred)),
-                "ho_rmse":    float(np.sqrt(mean_squared_error(y_te, y_pred))),
-                "ho_mae":     float(mean_absolute_error(y_te, y_pred)),
+                "cv_r2_mean":    best_cv_r2,
+                "cv_r2_std":     cv_results[best_name]["cv_r2_std"],
+                "ho_r2":         float(r2_score(y_te, y_pred)),
+                "ho_rmse":       float(np.sqrt(mean_squared_error(y_te, y_pred))),
+                "ho_mae":        float(mean_absolute_error(y_te, y_pred)),
+                "ho_smape":      smape(y_te, y_pred),
+                "ho_max_error":  float(sklearn_max_error(y_te, y_pred)),
             }
-            log.info(f"    ho_r2={metrics['ho_r2']:.4f}  "
-                     f"rmse={metrics['ho_rmse']:.4f}  mae={metrics['ho_mae']:.4f}")
+            log.info(
+                f"    ho_r2={metrics['ho_r2']:.4f}  rmse={metrics['ho_rmse']:.4f}"
+                f"  mae={metrics['ho_mae']:.4f}  smape={metrics['ho_smape']:.2f}%"
+                f"  max_err={metrics['ho_max_error']:.4f}"
+            )
+            top_feat = sorted(feat_rank.items(), key=lambda x: x[1]["rank"])
+            log.info("    Feature ranking: " +
+                     "  ".join(f"{n}({v['rank']})" for n, v in top_feat))
 
             with mlflow.start_run(run_name=f"{scenario_label}-{target_alias}",
                                   tags={"phase": "winner"}):
@@ -257,6 +293,7 @@ def main():
                     "dataset":     DATASET_PATH,
                 })
                 mlflow.log_metrics(metrics)
+                mlflow.log_dict(feat_rank, "feature_ranking.json")
                 # log all candidates for easy paper comparison
                 for cname, cres in cv_results.items():
                     mlflow.log_metric(f"cmp_{cname}_cv_r2",
