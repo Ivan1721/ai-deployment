@@ -99,6 +99,27 @@ Registered models (8):
 | `ho_r2` | Hold-out R² (20% test split) |
 | `ho_rmse` | Hold-out RMSE |
 | `ho_mae` | Hold-out MAE |
+| `ho_smape` | Hold-out sMAPE (%) — robust to near-zero targets |
+| `ho_max_error` | Hold-out worst-case single prediction error |
+
+### Logged artifacts (winner runs)
+
+| Artifact | Format | Description |
+|---|---|---|
+| `feature_ranking.json` | JSON | Permutation importance for each of the 6 features |
+| `model/` | MLflow sklearn | Serialized Pipeline (StandardScaler + best estimator) |
+
+Example `feature_ranking.json`:
+```json
+{
+  "Humans":          {"importance_mean": 0.42, "importance_std": 0.03, "rank": 1},
+  "ROW_N":           {"importance_mean": 0.31, "importance_std": 0.02, "rank": 2},
+  "Act_Mixed":       {"importance_mean": 0.18, "importance_std": 0.01, "rank": 3},
+  "RandomPosition":  {"importance_mean": 0.05, "importance_std": 0.01, "rank": 4},
+  "Act_Ladder":      {"importance_mean": 0.03, "importance_std": 0.01, "rank": 5},
+  "Act_Picker":      {"importance_mean": 0.01, "importance_std": 0.00, "rank": 6}
+}
+```
 
 ---
 
@@ -168,7 +189,7 @@ Three-layer statistical check comparing current window metrics against a fixed b
 | T-test | One-sample t-test, last 5 observations | p < 0.05 AND abs change > 0.02 |
 | EWMA | Exponential moving average divergence | EWMA deviation > 0.07 |
 
-**Drift declared** when ≥ 2 metrics (`r2`, `rmse`, `mae`) are flagged simultaneously.
+**Drift declared** when ≥ 2 metrics (`r2`, `rmse`, `mae`, `smape`, `max_error`) are flagged simultaneously.
 
 ### Retraining trigger (retrain_trigger.py)
 
@@ -195,40 +216,161 @@ When drift is detected the trigger:
 
 ### test_model.py — test classes
 
-| Class | Tests |
-|---|---|
-| `TestPerformanceGates` | `test_r2_above_gate`, `test_cv_stability` |
-| `TestSanityChecks` | `test_beats_dummy`, `test_non_negative_predictions`, `test_reproducible`, `test_single_sample` |
-| `TestMLFlowRegistry` | `test_model_in_registry`, `test_ho_r2_logged` |
+| Class | Test | What validates |
+|---|---|---|
+| `TestPerformanceGates` | `test_r2_gate` | Hold-out R² ≥ `GATE_MIN_R2` (default 0.70) |
+| `TestPerformanceGates` | `test_smape_gate` | Hold-out sMAPE < `GATE_MAX_SMAPE` (default 20%) |
+| `TestPerformanceGates` | `test_max_error_finite` | Worst-case error is finite (no `inf`/`nan`) |
+| `TestPerformanceGates` | `test_cv_stability` | CV std < 0.15 and CV mean ≥ `GATE_MIN_R2` |
+| `TestSanityChecks` | `test_better_than_dummy` | Model beats mean-baseline by at least 0.30 R² |
+| `TestSanityChecks` | `test_non_negative_predictions` | All predictions ≥ 0 (crops/workload can't be negative) |
+| `TestSanityChecks` | `test_single_sample` | Model accepts 1 row and returns a finite scalar |
+| `TestSanityChecks` | `test_reproducible` | Same input always produces same output |
+| `TestMLFlowRegistry` | `test_model_in_registry` | Model exists in registry at `Production` stage |
+| `TestMLFlowRegistry` | `test_all_metrics_logged` | All 5 scalar metrics exist in the MLflow run |
+| `TestMLFlowRegistry` | `test_feature_ranking_artifact` | `feature_ranking.json` artifact exists in the run |
+| `TestMLFlowRegistry` | `test_r2_metric_logged` | Logged `ho_r2` ≥ `GATE_MIN_R2` |
 
-### Running tests
+### Running validation
 
 ```bash
-# Inside test-runner container (runs automatically on docker compose up):
-pytest tests/ -v
+# Full test suite (all 5 files, all 8 models):
+docker compose run --rm test-runner
 
-# Manually against a running stack:
-docker compose exec test-runner pytest tests/ -v
+# Only model quality gates:
+docker compose run --rm test-runner pytest tests/test_model.py -v
 
-# Single file:
-docker compose exec test-runner pytest tests/test_model.py -v
+# Only API contract tests:
+docker compose run --rm test-runner pytest tests/test_api.py -v
 
-# With custom quality gate:
-docker compose run -e GATE_MIN_R2=0.75 test-runner pytest tests/test_model.py
+# Only data validation:
+docker compose run --rm test-runner pytest tests/test_data.py -v
+
+# Only drift detector unit tests:
+docker compose run --rm test-runner pytest tests/test_performance_drift.py -v
+
+# Stricter quality gate (R² ≥ 0.80, sMAPE < 10%):
+docker compose run --rm \
+  -e GATE_MIN_R2=0.80 \
+  -e GATE_MAX_SMAPE=10.0 \
+  test-runner pytest tests/test_model.py -v
 ```
 
 ---
 
-## Quality Gate
+## Validation Flow
 
-| Parameter | Default | Set via |
+Validation happens in **three independent layers**, each with a different purpose:
+
+```
+bash start.sh
+     │
+     ├─ 1. TRAINING GATE (automático, bloqueante)
+     │      train.py  ──►  ho_r2 < 0.70 → modelo NO se registra
+     │
+     ├─ 2. TEST SUITE (manual, bajo demanda)
+     │      docker compose run --rm test-runner
+     │            ├── test_data.py              validación del dataset
+     │            ├── test_model.py             quality gates sobre los 8 modelos
+     │            ├── test_api.py               contrato HTTP de la API
+     │            ├── test_performance_drift.py tests unitarios del detector
+     │            └── test_performance_drift_integration.py  escenarios de drift
+     │
+     └─ 3. DRIFT MONITORING (automático, continuo en background)
+            docker compose up -d drift-detector
+                  ├── KS test sobre features      → data drift
+                  ├── KS test sobre predicciones  → concept drift
+                  └── R²/RMSE/MAE/sMAPE/MaxErr    → performance drift
+                        └── si detecta drift → entrena challenger → promueve si mejora
+```
+
+### Capa 1 — Training gate
+
+Se ejecuta automáticamente dentro de `train.py` al correr `bash start.sh`.
+
+| Condición | Resultado |
+|---|---|
+| `ho_r2 >= 0.70` | Modelo promovido a `Production` en MLflow |
+| `ho_r2 < 0.70` | Modelo registrado pero **no promovido** (queda en `None` stage) |
+
+Para cambiar el umbral:
+```bash
+docker compose run -e GATE_MIN_R2=0.80 --rm model-trainer python train.py
+```
+
+### Capa 2 — Test suite
+
+Se ejecuta manualmente después del training.
+
+```bash
+# Correr toda la suite:
+docker compose run --rm test-runner
+
+# Solo quality gates del modelo (R², sMAPE, Max Error, CV, sanity checks):
+docker compose run --rm test-runner pytest tests/test_model.py -v
+
+# Con umbrales personalizados:
+docker compose run --rm \
+  -e GATE_MIN_R2=0.80 \
+  -e GATE_MAX_SMAPE=10.0 \
+  test-runner pytest tests/test_model.py -v
+```
+
+**Métricas evaluadas por el test suite:**
+
+| Métrica | Gate | Archivo |
 |---|---|---|
-| Minimum R² | 0.70 | `GATE_MIN_R2` env var / `--min_r2` CI input |
+| R² (hold-out) | ≥ 0.70 | `test_model.py` |
+| sMAPE (hold-out) | < 20% | `test_model.py` |
+| Max Error | debe ser finito | `test_model.py` |
+| CV R² std | < 0.15 | `test_model.py` |
+| R² vs DummyRegressor | modelo ≥ dummy + 0.30 | `test_model.py` |
+| Predicciones negativas | 0 permitidas | `test_model.py` |
+| Métricas en MLflow | ho_r2, ho_rmse, ho_mae, ho_smape, ho_max_error | `test_model.py` |
+| Artefacto feature ranking | `feature_ranking.json` debe existir | `test_model.py` |
+| HTTP 200 en `/predict` | todas las actividades/workers/crop_rows | `test_api.py` |
+| HTTP 422 en inputs inválidos | scenario fuera de rango, activity inválida | `test_api.py` |
+| Latencia | < 500ms por predicción | `test_api.py` |
+| Dataset schema | 15 cols, sin nulos, ambos scenarios | `test_data.py` |
 
-Applied in three places:
-- `train.py`: refuses to promote a model to Production if hold-out R² < 0.70
-- `test_model.py`: `TestPerformanceGates.test_r2_above_gate` fails the test suite
-- GitHub Actions: `retrain.yml` input `min_r2` (default 0.70) passed as `GATE_MIN_R2`
+### Capa 3 — Drift monitoring
+
+Se ejecuta en background de forma continua.
+
+```bash
+docker compose up -d drift-detector
+docker compose logs -f drift-detector
+```
+
+| Tipo de drift | Método estadístico | Trigger |
+|---|---|---|
+| Data drift | KS test, p < 0.05 en cualquier feature | Log + alerta |
+| Concept drift | KS test sobre distribución de predicciones | Log + alerta |
+| Performance drift | Effect size + t-test + EWMA sobre R²/RMSE/MAE/sMAPE/MaxErr | Reentrenamiento automático |
+
+Cuando se detecta performance drift: entrena un challenger con `GradientBoostingRegressor`, compara `ho_r2` contra el champion actual, y promueve si `challenger_r2 >= champion_r2 + 0.02`. Luego llama `POST /reload` para actualizar los modelos en la API sin reiniciar el servicio.
+
+### Cuándo hacer `docker compose down -v`
+
+| Situación | Comando |
+|---|---|
+| Cambios en `train.py` (nuevas métricas, nuevos modelos) | `docker compose down -v && bash start.sh` |
+| Cambios solo en `app.py`, tests, o detector | `docker compose down && bash start.sh` |
+| Solo reconstruir imágenes sin reentrenar | `docker compose build && docker compose up -d` |
+
+> `-v` borra el volumen `mlflow-data` (base de datos + modelos registrados). Úsalo cuando los modelos en producción necesiten regenerarse con los nuevos cambios de código.
+
+## Quality Gates — Referencia rápida
+
+| Parámetro | Default | Variable de entorno |
+|---|---|---|
+| R² mínimo | 0.70 | `GATE_MIN_R2` |
+| sMAPE máximo | 20% | `GATE_MAX_SMAPE` |
+
+Aplicados en:
+- `train.py` → gate de promoción a Production
+- `test_model.py` → falla la suite si no se cumple
+- `retrain.yml` (CI) → input `min_r2` pasado como `GATE_MIN_R2`
 
 ---
 
