@@ -167,6 +167,122 @@ Cambios en todos los servicios que necesitan acceso al dataset:
 
 ---
 
+## Comandos de uso
+
+### Prerequisitos
+- Docker Desktop corriendo en Windows con integración WSL2 activada
+- Terminal WSL Ubuntu (no PowerShell)
+
+```bash
+# Ir al directorio del stack
+cd ~/ai-deployment/mlops-stack
+```
+
+---
+
+### Levantar el stack completo (primera vez o tras cambios)
+
+```bash
+bash start.sh
+```
+
+Hace en orden: build de imágenes → MLflow → entrenamiento de los 12 candidatos × 8 slots → Inference API + Nginx.
+
+---
+
+### Apagar el stack
+
+```bash
+# Apaga y elimina contenedores — los modelos en MLflow quedan guardados
+docker compose down
+
+# Apaga Y borra todos los datos (modelos, runs de MLflow) — requiere reentrenar
+docker compose down -v
+```
+
+| Comando | Contenedores | Volúmenes (modelos) | Imágenes |
+|---|---|---|---|
+| `docker compose down` | eliminados | ✅ intactos | ✅ intactas |
+| `docker compose down -v` | eliminados | ❌ borrados | ✅ intactas |
+| `docker compose stop` | pausados | ✅ intactos | ✅ intactas |
+
+---
+
+### Reentrenar sin bajar el stack
+
+```bash
+docker compose run --rm model-trainer
+```
+
+---
+
+### Recargar modelos en la API sin reiniciar
+
+```bash
+curl -X POST http://localhost:8000/reload
+```
+
+---
+
+### Correr los tests
+
+```bash
+docker compose run --rm test-runner
+```
+
+---
+
+### Ver logs en tiempo real
+
+```bash
+# Todos los servicios
+docker compose logs -f
+
+# Un servicio específico
+docker compose logs -f inference-api
+docker compose logs -f model-trainer
+docker compose logs -f mlflow-server
+```
+
+---
+
+### Hacer predicciones
+
+```bash
+# Escenario 0 (Human-Only), 6 trabajadores, fila 2, actividad mixta
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"scenario":0,"workers":6,"crop_row":2,"rand_pos":0,"activity":"harv_mixed"}'
+
+# Escenario 1 (Human-Robot), 10 trabajadores, fila 1, recolección en suelo
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"scenario":1,"workers":10,"crop_row":1,"rand_pos":0,"activity":"harv_ground"}'
+```
+
+**Valores válidos por campo:**
+
+| Campo | Opciones |
+|---|---|
+| `scenario` | `0` = HumanOnly, `1` = WithRobot |
+| `workers` | 1, 3, 6, 8, 10, 12 |
+| `crop_row` | 1, 2, 3 |
+| `rand_pos` | 0 = No, 1 = Sí |
+| `activity` | `harv_ground`, `harv_ladder`, `harv_mixed`, `harv_picker` |
+
+---
+
+### URLs del stack
+
+| Servicio | URL |
+|---|---|
+| MLflow UI (experimentos y modelos) | http://localhost:5001 |
+| Inference API | http://localhost:8000 |
+| API docs interactivos (Swagger) | http://localhost:8000/docs |
+| Health check | http://localhost:8000/health |
+
+---
+
 ## Archivos pendientes de actualizar
 
 Los siguientes archivos aún usan `load_iris()` o métricas de clasificación y **no fueron modificados** en esta sesión:
@@ -191,3 +307,7 @@ Los siguientes archivos aún usan `load_iris()` o métricas de clasificación y 
 | `9bafd90` | Add multi-model comparison to training pipeline |
 | `da2620d` | Fix start.sh predict example for HRI API schema |
 | `a9c1b33` | Fix bad mlflow import order in test_model.py model_ctx fixture |
+| `751a4a7` | Add CHANGELOG.md documenting HRI dataset integration changes |
+| `13ca2a4` | Fix CRLF line endings in shell scripts, add .gitattributes |
+| `44286e6` | Fix missing libgomp1 for LightGBM in model-trainer Docker image |
+| `018b8e5` | Add XGBoost/LightGBM/CatBoost to inference-api image |
