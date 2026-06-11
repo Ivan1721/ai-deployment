@@ -12,6 +12,7 @@ networks:
 
 volumes:
   mlflow-data:   # persiste entre deploys y reboots
+  keycloak-data: # SECURITY FIX P0-1: Datos persistentes de Keycloak
 
 services:
 
@@ -20,7 +21,7 @@ services:
     container_name: mlflow-server
     restart: unless-stopped          # NUEVO: persiste entre reboots
     ports:
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"        # SECURITY FIX P0-4: localhost-only, no exponer públicamente
     volumes:
       - mlflow-data:/mlflow
     healthcheck:
@@ -51,7 +52,7 @@ services:
     container_name: inference-api
     restart: unless-stopped          # NUEVO
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"        # SECURITY FIX P0-4: localhost-only, solo nginx puede acceder públicamente
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
       MODEL_NAME: iris-classifier
@@ -120,9 +121,70 @@ services:
     container_name: nginx-proxy
     restart: unless-stopped          # NUEVO
     ports:
-      - "80:80"
+      - "80:80"                      # HTTP → redirige a HTTPS
+      - "443:443"                    # SECURITY FIX P0-3: HTTPS
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro  # Certificados (read-only)
     depends_on:
       - mlflow
       - inference-api
     networks:
       - mlops-net
+
+  # SECURITY FIX P0-1: Keycloak para autenticación
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.7
+    container_name: keycloak
+    restart: unless-stopped
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin123  # DEBE CAMBIAR en producción
+      KC_DB: h2
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "false"  # Permitir HTTP para desarrollo
+    ports:
+      - "127.0.0.1:8080:8080"  # localhost-only
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+    networks:
+      - mlops-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # SECURITY FIX P0-1: OAuth2 Proxy para proteger endpoints
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.5.1
+    container_name: oauth2-proxy
+    restart: unless-stopped
+    environment:
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_PROVIDER_DISPLAY_NAME: Keycloak
+      OAUTH2_PROXY_OIDC_ISSUER_URL: http://keycloak:8080/realms/mlops
+      OAUTH2_PROXY_CLIENT_ID: mlops-client
+      OAUTH2_PROXY_CLIENT_SECRET: mlops-client-secret  # DEBE CAMBIAR en producción
+      OAUTH2_PROXY_REDIRECT_URL: https://localhost/oauth2/callback
+      OAUTH2_PROXY_COOKIE_SECRET: $(openssl rand -base64 32)  # Genera secret aleatorio
+      OAUTH2_PROXY_COOKIE_SECURE: "true"
+      OAUTH2_PROXY_COOKIE_HTTPONLY: "true"
+      OAUTH2_PROXY_COOKIE_SAMESITE: "Strict"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      # Rutas protegidas
+      OAUTH2_PROXY_SKIP_AUTH_PATHS: "^/oauth2/.*"
+      OAUTH2_PROXY_SKIP_AUTH_ROUTES: ""
+    ports:
+      - "127.0.0.1:4180:4180"  # localhost-only
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - mlops-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4180/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
