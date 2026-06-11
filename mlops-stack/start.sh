@@ -23,7 +23,12 @@ check_port $MLFLOW_PORT
 check_port $API_PORT
 
 # ── build ──────────────────────────────────────────────────
+# Use a named builder to avoid Docker's default builder lease-corruption bug.
+# Creates it on first run; subsequent runs reuse it.
 echo "▶ Building images…"
+docker buildx inspect mlops-builder > /dev/null 2>&1 \
+  || docker buildx create --name mlops-builder --driver docker-container
+export BUILDX_BUILDER=mlops-builder
 docker compose build --parallel
 
 # ── levantar MLFlow ────────────────────────────────────────
@@ -54,8 +59,8 @@ docker compose run --rm model-trainer
 echo "▶ Starting Inference API & Nginx…"
 docker compose up -d inference-api nginx
 
-echo "▶ Waiting for Inference API… (máx 90s)"
-MAX=90; ELAPSED=0
+echo "▶ Waiting for Inference API… (máx 180s)"
+MAX=180; ELAPSED=0
 until curl -sf http://localhost:$API_PORT/health > /dev/null 2>&1; do
     if [ $ELAPSED -ge $MAX ]; then
         echo ""
@@ -77,8 +82,8 @@ echo "  MLFlow UI       →  http://localhost:$MLFLOW_PORT"
 echo "  Inference API   →  http://localhost:$API_PORT"
 echo "  API docs        →  http://localhost:$API_PORT/docs"
 echo ""
-echo "  Quick predict test:"
+echo "  Quick predict test (scenario 0 = HumanOnly, 6 workers, row 2, mixed activity):"
 echo "  curl -X POST http://localhost:$API_PORT/predict \\"
 echo '    -H "Content-Type: application/json" \'
-echo '    -d '"'"'{"instances": [[5.1, 3.5, 1.4, 0.2]]}'"'"
+echo '    -d '"'"'{"scenario":0,"workers":6,"crop_row":2,"rand_pos":0,"activity":"harv_mixed"}'"'"
 echo "════════════════════════════════════════════════════════"

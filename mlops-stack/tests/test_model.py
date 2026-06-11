@@ -1,139 +1,245 @@
 """
-test_model.py  ─  Nivel 2: Model Tests + Quality Gates
+test_model.py  ─  Nivel 2: Model Tests + Quality Gates  (HRI Regression)
+Tests all 8 models: 2 scenarios x 4 targets.
 """
-import os, pytest
+import os, pytest, json
 import numpy as np
 import pandas as pd
-from sklearn.datasets import load_iris
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
-from sklearn.dummy import DummyClassifier
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
+from sklearn.metrics import (r2_score, mean_squared_error, mean_absolute_error,
+                              max_error as sklearn_max_error)
+from sklearn.dummy import DummyRegressor
 
-MLFLOW_URI   = os.environ.get("MLFLOW_URI",   "http://host.docker.internal:5001")
-MODEL_NAME   = os.environ.get("MODEL_NAME",   "iris-classifier")
+MLFLOW_URI   = os.environ.get("MLFLOW_TRACKING_URI", "http://host.docker.internal:5001")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE",  "Production")
-MIN_ACCURACY = float(os.environ.get("MIN_ACCURACY", "0.90"))
-MIN_F1       = float(os.environ.get("MIN_F1",       "0.90"))
+DATASET_PATH = os.environ.get("DATASET_PATH", "/data/simulation_all.csv")
+MIN_R2       = float(os.environ.get("GATE_MIN_R2",    "0.70"))
+MAX_SMAPE    = float(os.environ.get("GATE_MAX_SMAPE", "20.0"))   # %
 
+SCENARIOS = {0: "HumanOnly", 1: "WithRobot"}
+TARGETS = {
+    "TotalRecollected": "TotalRecollectedCrops_crop_units",
+    "CargoZoneProd":    "TotalProductionCargoZone_crop_units",
+    "TotalWorkload":    "TotalHumanWorkload_kcal",
+    "AvgProduction":    "AverageHumanProduction_crop_units",
+}
+FEATURE_NAMES = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
+
+ALL_MODELS = [
+    (sid, slabel, ta, tc)
+    for sid, slabel in SCENARIOS.items()
+    for ta, tc in TARGETS.items()
+]
+
+
+def _load_df():
+    df = pd.read_csv(DATASET_PATH)
+    dummies = pd.get_dummies(df["MainActivity"], prefix="Act", drop_first=True)
+    dummies = dummies.rename(columns={
+        "Act_harv_ladder": "Act_Ladder",
+        "Act_harv_mixed":  "Act_Mixed",
+        "Act_harv_picker": "Act_Picker",
+    })
+    for col in ["Act_Ladder", "Act_Mixed", "Act_Picker"]:
+        if col not in dummies.columns:
+            dummies[col] = 0
+    return pd.concat([df, dummies[["Act_Ladder", "Act_Mixed", "Act_Picker"]]], axis=1)
+
+
+def _model_name(scenario_label: str, target_alias: str) -> str:
+    return f"hri-{scenario_label}-{target_alias}"
+
+
+def _smape(y_true, y_pred) -> float:
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    denom  = (np.abs(y_true) + np.abs(y_pred)) / 2.0
+    return float(np.mean(np.where(denom == 0, 0.0, np.abs(y_pred - y_true) / denom)) * 100)
+
+
+# ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
-def model():
-    import mlflow, mlflow.sklearn
+def df():
+    return _load_df()
+
+
+@pytest.fixture(scope="module", params=ALL_MODELS,
+                ids=[f"{s}-{t}" for _, s, t, _ in ALL_MODELS])
+def model_ctx(request):
+    """Loads one of the 8 production models from MLflow."""
+    import mlflow
+    import mlflow.sklearn
     mlflow.set_tracking_uri(MLFLOW_URI)
+
+    scenario_id, scenario_label, target_alias, target_col = request.param
+    name = _model_name(scenario_label, target_alias)
     try:
-        return mlflow.sklearn.load_model(f"models:/{MODEL_NAME}/{MODEL_STAGE}")
+        model = mlflow.sklearn.load_model(f"models:/{name}/{MODEL_STAGE}")
     except Exception as e:
-        pytest.skip(f"Cannot load model: {e}")
+        pytest.skip(f"Cannot load {name}: {e}")
+    return model, scenario_id, scenario_label, target_alias, target_col
 
 
 @pytest.fixture(scope="module")
-def splits():
-    iris = load_iris(as_frame=True)
-    X, y = iris.data, iris.target
-    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, stratify=y, random_state=42)
-    return X_tr, X_te, y_tr, y_te, list(iris.target_names)
+def splits(model_ctx, df):
+    model, scenario_id, _, _, target_col = model_ctx
+    df_sc = df[df["Scenario"] == scenario_id]
+    X = df_sc[FEATURE_NAMES].values
+    y = df_sc[target_col].values
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.20, random_state=42)
+    return model, X_tr, X_te, y_tr, y_te
 
 
-@pytest.fixture(scope="module")
-def preds(model, splits):
-    _, X_te, _, y_te, _ = splits
-    return model.predict(X_te), model.predict_proba(X_te), y_te
-
-
-# ── Quality Gates ──────────────────────────────────────────────────────────
+# ── Quality Gates ──────────────────────────────────────────────────────────────
 
 class TestPerformanceGates:
 
-    def test_accuracy_gate(self, model, splits):
-        _, X_te, _, y_te, _ = splits
-        acc = accuracy_score(y_te, model.predict(X_te))
-        assert acc >= MIN_ACCURACY, f"GATE FAILED: accuracy={acc:.4f} < {MIN_ACCURACY}"
+    def test_r2_gate(self, splits, model_ctx):
+        model, _, X_te, _, y_te = splits
+        _, _, scenario_label, target_alias, _ = model_ctx
+        r2 = r2_score(y_te, model.predict(X_te))
+        assert r2 >= MIN_R2, (
+            f"GATE FAILED: {scenario_label}-{target_alias}  R2={r2:.4f} < {MIN_R2}"
+        )
 
-    def test_f1_gate(self, model, splits):
-        _, X_te, _, y_te, _ = splits
-        f1 = f1_score(y_te, model.predict(X_te), average="weighted")
-        assert f1 >= MIN_F1, f"GATE FAILED: f1={f1:.4f} < {MIN_F1}"
+    def test_smape_gate(self, splits, model_ctx):
+        model, _, X_te, _, y_te = splits
+        _, _, scenario_label, target_alias, _ = model_ctx
+        s = _smape(y_te, model.predict(X_te))
+        assert s < MAX_SMAPE, (
+            f"GATE FAILED: {scenario_label}-{target_alias}  sMAPE={s:.2f}% >= {MAX_SMAPE}%"
+        )
 
-    def test_per_class_recall(self, preds, splits):
-        y_pred, _, y_te = preds
-        _, _, _, _, names = splits
-        for i, name in enumerate(names):
-            mask = (y_te == i)
-            if mask.sum() == 0: continue
-            recall = (y_pred[mask] == i).mean()
-            assert recall >= 0.80, f"Low recall for '{name}': {recall:.4f}"
+    def test_max_error_finite(self, splits, model_ctx):
+        model, _, X_te, _, y_te = splits
+        _, _, scenario_label, target_alias, _ = model_ctx
+        me = sklearn_max_error(y_te, model.predict(X_te))
+        assert np.isfinite(me), (
+            f"{scenario_label}-{target_alias}: max_error is not finite ({me})"
+        )
 
-    def test_cv_stability(self, model):
-        iris = load_iris(as_frame=True)
-        scores = cross_val_score(model, iris.data, iris.target, cv=5, scoring="accuracy")
-        assert scores.std() < 0.05, f"CV unstable: std={scores.std():.4f}"
-        assert scores.mean() >= 0.90, f"CV mean low: {scores.mean():.4f}"
+    def test_cv_stability(self, model_ctx, df):
+        model, scenario_id, scenario_label, target_alias, target_col = model_ctx
+        df_sc = df[df["Scenario"] == scenario_id]
+        X = df_sc[FEATURE_NAMES].values
+        y = df_sc[target_col].values
+        cv = KFold(n_splits=5, shuffle=True, random_state=42)
+        scores = cross_val_score(model, X, y, cv=cv, scoring="r2")
+        assert scores.std() < 0.15, (
+            f"CV unstable: {scenario_label}-{target_alias}  std={scores.std():.4f}"
+        )
+        assert scores.mean() >= MIN_R2, (
+            f"CV mean too low: {scenario_label}-{target_alias}  mean={scores.mean():.4f}"
+        )
 
+
+# ── Sanity Checks ──────────────────────────────────────────────────────────────
 
 class TestSanityChecks:
 
-    def test_better_than_random(self, model, splits):
-        X_tr, X_te, y_tr, y_te, _ = splits
-        baseline = DummyClassifier(strategy="stratified", random_state=42)
-        baseline.fit(X_tr, y_tr)
-        b_acc = accuracy_score(y_te, baseline.predict(X_te))
-        m_acc = accuracy_score(y_te, model.predict(X_te))
-        assert m_acc >= b_acc + 0.20, f"Model ({m_acc:.4f}) barely beats baseline ({b_acc:.4f})"
+    def test_better_than_dummy(self, splits, model_ctx):
+        model, X_tr, X_te, y_tr, y_te = splits
+        _, _, scenario_label, target_alias, _ = model_ctx
+        dummy = DummyRegressor(strategy="mean")
+        dummy.fit(X_tr, y_tr)
+        r2_model = r2_score(y_te, model.predict(X_te))
+        r2_dummy = r2_score(y_te, dummy.predict(X_te))
+        assert r2_model >= r2_dummy + 0.30, (
+            f"{scenario_label}-{target_alias}: model R2={r2_model:.4f} "
+            f"barely beats mean-baseline R2={r2_dummy:.4f}"
+        )
 
-    def test_predicts_all_classes(self, preds, splits):
-        y_pred, _, _ = preds
-        _, _, _, _, names = splits
-        predicted = set(y_pred.tolist())
-        for i in range(len(names)):
-            assert i in predicted, f"Model never predicts class {names[i]}"
+    def test_non_negative_predictions(self, model_ctx, df):
+        """All targets (crops/workload) must be >= 0."""
+        model, scenario_id, scenario_label, target_alias, _ = model_ctx
+        X = df[df["Scenario"] == scenario_id][FEATURE_NAMES].values
+        preds = model.predict(X)
+        neg = int((preds < 0).sum())
+        assert neg == 0, (
+            f"{scenario_label}-{target_alias}: {neg} negative predictions"
+        )
 
-    def test_reproducible(self, model):
-        iris = load_iris(as_frame=True)
-        s = iris.data.iloc[:10]
-        assert (model.predict(s) == model.predict(s)).all(), "Model not deterministic"
+    def test_single_sample(self, model_ctx):
+        """Model accepts a single row and returns a finite scalar."""
+        model, *_ = model_ctx
+        # 6 workers, row 2, no random position, mixed activity
+        x = np.array([[6, 2, 0, 0, 1, 0]], dtype=float)
+        p = model.predict(x)
+        assert len(p) == 1 and np.isfinite(p[0]), "Prediction must be a single finite number"
+
+    def test_reproducible(self, model_ctx, df):
+        model, scenario_id, *_ = model_ctx
+        X = df[df["Scenario"] == scenario_id][FEATURE_NAMES].values[:10]
+        assert np.allclose(model.predict(X), model.predict(X)), "Model is not deterministic"
 
 
-class TestRobustness:
-
-    def test_single_sample(self, model):
-        df = pd.DataFrame([[5.1, 3.5, 1.4, 0.2]],
-                          columns=load_iris().feature_names)
-        p = model.predict(df)
-        assert len(p) == 1 and p[0] in [0, 1, 2]
-
-    def test_probabilities_sum_to_one(self, model):
-        iris = load_iris(as_frame=True)
-        probs = model.predict_proba(iris.data.iloc[:20])
-        assert np.allclose(probs.sum(axis=1), 1.0, atol=1e-6)
-
-    def test_no_negative_probabilities(self, model):
-        iris = load_iris(as_frame=True)
-        assert (model.predict_proba(iris.data) >= 0).all()
-
+# ── MLflow Registry ────────────────────────────────────────────────────────────
 
 class TestMLFlowRegistry:
 
-    def test_model_in_registry(self):
+    def test_model_in_registry(self, model_ctx):
         import mlflow
         from mlflow import MlflowClient
         mlflow.set_tracking_uri(MLFLOW_URI)
         client = MlflowClient(MLFLOW_URI)
+        _, _, scenario_label, target_alias, _ = model_ctx
+        name = _model_name(scenario_label, target_alias)
         try:
-            vs = client.get_latest_versions(MODEL_NAME, stages=[MODEL_STAGE])
-            assert len(vs) > 0, f"No versions in stage '{MODEL_STAGE}'"
+            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
+            assert len(vs) > 0, f"No versions of '{name}' in stage '{MODEL_STAGE}'"
         except Exception as e:
             pytest.skip(f"MLFlow not available: {e}")
 
-    def test_accuracy_metric_logged(self):
+    def test_all_metrics_logged(self, model_ctx):
         import mlflow
         from mlflow import MlflowClient
         mlflow.set_tracking_uri(MLFLOW_URI)
         client = MlflowClient(MLFLOW_URI)
+        _, _, scenario_label, target_alias, _ = model_ctx
+        name = _model_name(scenario_label, target_alias)
         try:
-            vs  = client.get_latest_versions(MODEL_NAME, stages=[MODEL_STAGE])
-            if not vs: pytest.skip("No production version")
+            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
+            if not vs:
+                pytest.skip("No production version found")
             run = client.get_run(vs[0].run_id)
-            acc = run.data.metrics.get("accuracy")
-            assert acc is not None and acc > 0
+            m   = run.data.metrics
+            for key in ("ho_r2", "ho_rmse", "ho_mae", "ho_smape", "ho_max_error"):
+                assert key in m, f"Metric '{key}' not logged for {name}"
+        except Exception as e:
+            pytest.skip(f"MLFlow not available: {e}")
+
+    def test_feature_ranking_artifact(self, model_ctx):
+        import mlflow
+        from mlflow import MlflowClient
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        client = MlflowClient(MLFLOW_URI)
+        _, _, scenario_label, target_alias, _ = model_ctx
+        name = _model_name(scenario_label, target_alias)
+        try:
+            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
+            if not vs:
+                pytest.skip("No production version found")
+            artifacts = [a.path for a in client.list_artifacts(vs[0].run_id)]
+            assert "feature_ranking.json" in artifacts, \
+                f"feature_ranking.json not found for {name}. Found: {artifacts}"
+        except Exception as e:
+            pytest.skip(f"MLFlow not available: {e}")
+
+    def test_r2_metric_logged(self, model_ctx):
+        import mlflow
+        from mlflow import MlflowClient
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        client = MlflowClient(MLFLOW_URI)
+        _, _, scenario_label, target_alias, _ = model_ctx
+        name = _model_name(scenario_label, target_alias)
+        try:
+            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
+            if not vs:
+                pytest.skip("No production version found")
+            run = client.get_run(vs[0].run_id)
+            ho_r2 = run.data.metrics.get("ho_r2")
+            assert ho_r2 is not None, "Metric 'ho_r2' not found in MLflow run"
+            assert ho_r2 >= MIN_R2, f"Logged ho_r2={ho_r2:.4f} < {MIN_R2}"
         except Exception as e:
             pytest.skip(f"MLFlow not available: {e}")

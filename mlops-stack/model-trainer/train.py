@@ -1,164 +1,331 @@
 """
 train.py
 ────────
-Entrena un clasificador RandomForest sobre el dataset Iris,
-registra métricas y parámetros en MLFlow Tracking Server,
-guarda el modelo como artefacto y lo promueve a "Production"
-en el Model Registry.
+Multi-model comparison for the HRI Agricultural Harvesting Dataset.
+2 scenarios × 4 targets = 8 model slots.
+Each slot: all candidates evaluated with 5-fold CV → best R² wins → registered.
+Dataset: Vasconez & Auat Cheein (2022), Biosystems Engineering Vol. 223.
 """
 
 import os
 import time
 import logging
+import numpy as np
+import pandas as pd
 import mlflow
 import mlflow.sklearn
 from mlflow import MlflowClient
-from sklearn.datasets import load_iris
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import (
-    accuracy_score, f1_score, precision_score, recall_score, classification_report
-)
+from mlflow.models import infer_signature
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
+from sklearn.ensemble import (RandomForestRegressor, GradientBoostingRegressor,
+                              ExtraTreesRegressor)
+from sklearn.neural_network import MLPRegressor
+from sklearn.svm import SVR
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (r2_score, mean_squared_error, mean_absolute_error,
+                             max_error as sklearn_max_error)
+from sklearn.inspection import permutation_importance
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
-TRACKING_URI   = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
-ARTIFACT_ROOT  = os.environ.get("MLFLOW_ARTIFACT_ROOT", None)   # /mlflow/artifacts si está montado
-MODEL_NAME     = "iris-classifier"
-EXPERIMENT     = "iris-production"
+TRACKING_URI  = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
+ARTIFACT_ROOT = os.environ.get("MLFLOW_ARTIFACT_ROOT", None)
+DATASET_PATH  = os.environ.get("DATASET_PATH", "/data/simulation_all.csv")
+EXPERIMENT    = "hri-harvesting"
 
-PARAMS = {
-    "n_estimators": 200,
-    "max_depth": 8,
-    "min_samples_split": 4,
-    "min_samples_leaf": 2,
-    "class_weight": "balanced",
-    "random_state": 42,
+TARGETS = {
+    "TotalRecollected": "TotalRecollectedCrops_crop_units",
+    "CargoZoneProd":    "TotalProductionCargoZone_crop_units",
+    "TotalWorkload":    "TotalHumanWorkload_kcal",
+    "AvgProduction":    "AverageHumanProduction_crop_units",
 }
+SCENARIOS     = {0: "HumanOnly", 1: "WithRobot"}
+FEATURE_NAMES = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
+QUALITY_GATE  = 0.70
 
+
+# ── Metric helpers ────────────────────────────────────────────────────────────
+
+def smape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Symmetric MAPE (0–100%). Robust to near-zero targets."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    denom  = (np.abs(y_true) + np.abs(y_pred)) / 2.0
+    return float(np.mean(np.where(denom == 0, 0.0, np.abs(y_pred - y_true) / denom)) * 100)
+
+
+def feature_ranking(pipeline, X_te: np.ndarray, y_te: np.ndarray) -> dict:
+    """Permutation importance — works for all model types (linear, tree, SVM, MLP)."""
+    result = permutation_importance(pipeline, X_te, y_te,
+                                    n_repeats=10, random_state=42, scoring="r2")
+    ranks  = np.argsort(np.argsort(-result.importances_mean)) + 1  # rank 1 = most important
+    return {
+        name: {
+            "importance_mean": round(float(result.importances_mean[i]), 6),
+            "importance_std":  round(float(result.importances_std[i]),  6),
+            "rank":            int(ranks[i]),
+        }
+        for i, name in enumerate(FEATURE_NAMES)
+    }
+
+
+# ── Optional heavy packages ───────────────────────────────────────────────────
+
+try:
+    from xgboost import XGBRegressor as _XGB
+    _HAS_XGB = True
+except ImportError:
+    _HAS_XGB = False
+
+try:
+    from lightgbm import LGBMRegressor as _LGB
+    _HAS_LGB = True
+except ImportError:
+    _HAS_LGB = False
+
+try:
+    from catboost import CatBoostRegressor as _CB
+    _HAS_CB = True
+except ImportError:
+    _HAS_CB = False
+
+
+# ── Candidate factory ─────────────────────────────────────────────────────────
+
+def build_candidates() -> dict[str, Pipeline]:
+    """Returns fresh (unfitted) pipeline instances for every candidate."""
+    c: dict[str, Pipeline] = {
+        "LinearRegression": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  LinearRegression()),
+        ]),
+        "Ridge": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  Ridge(alpha=1.0)),
+        ]),
+        "Lasso": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  Lasso(alpha=0.1, max_iter=2000)),
+        ]),
+        "ElasticNet": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  ElasticNet(alpha=0.1, l1_ratio=0.5, max_iter=2000)),
+        ]),
+        "SVR": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  SVR(C=10.0, epsilon=0.1, kernel="rbf")),
+        ]),
+        "ExtraTrees": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  ExtraTreesRegressor(n_estimators=200, max_depth=8,
+                                           random_state=42, n_jobs=-1)),
+        ]),
+        "RandomForest": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  RandomForestRegressor(n_estimators=200, max_depth=8,
+                                             min_samples_split=4, min_samples_leaf=2,
+                                             random_state=42, n_jobs=-1)),
+        ]),
+        "GradientBoosting": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  GradientBoostingRegressor(n_estimators=200, max_depth=4,
+                                                  learning_rate=0.05, random_state=42)),
+        ]),
+        "MLP": Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  MLPRegressor(hidden_layer_sizes=(64, 32), max_iter=500,
+                                    random_state=42)),
+        ]),
+    }
+    if _HAS_XGB:
+        c["XGBoost"] = Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  _XGB(n_estimators=200, max_depth=4, learning_rate=0.05,
+                            random_state=42, verbosity=0)),
+        ])
+    if _HAS_LGB:
+        c["LightGBM"] = Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  _LGB(n_estimators=200, max_depth=4, learning_rate=0.05,
+                            random_state=42, verbose=-1)),
+        ])
+    if _HAS_CB:
+        c["CatBoost"] = Pipeline([
+            ("scaler", StandardScaler()),
+            ("model",  _CB(iterations=200, depth=4, learning_rate=0.05,
+                           random_seed=42, verbose=0)),
+        ])
+    return c
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def wait_for_mlflow(uri: str, retries: int = 15, delay: int = 4) -> None:
     import urllib.request
     for i in range(retries):
         try:
             urllib.request.urlopen(f"{uri}/", timeout=3)
-            log.info("MLFlow server is up ✓")
+            log.info("MLflow server is up")
             return
         except Exception:
-            log.info(f"Waiting for MLFlow… attempt {i+1}/{retries}")
+            log.info(f"Waiting for MLflow... attempt {i+1}/{retries}")
             time.sleep(delay)
-    raise RuntimeError("MLFlow server did not respond in time.")
+    raise RuntimeError("MLflow server did not respond in time.")
 
+
+def load_and_preprocess(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    log.info(f"Dataset loaded: {df.shape[0]} rows × {df.shape[1]} columns")
+    dummies = pd.get_dummies(df["MainActivity"], prefix="Act", drop_first=True)
+    dummies = dummies.rename(columns={
+        "Act_harv_ladder": "Act_Ladder",
+        "Act_harv_mixed":  "Act_Mixed",
+        "Act_harv_picker": "Act_Picker",
+    })
+    for col in ["Act_Ladder", "Act_Mixed", "Act_Picker"]:
+        if col not in dummies.columns:
+            dummies[col] = 0
+    return pd.concat([df, dummies[["Act_Ladder", "Act_Mixed", "Act_Picker"]]], axis=1)
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     wait_for_mlflow(TRACKING_URI)
-
     mlflow.set_tracking_uri(TRACKING_URI)
 
-    # Si tenemos acceso local al filesystem de artefactos, usarlo directamente
+    client = MlflowClient(TRACKING_URI)
     if ARTIFACT_ROOT:
-        mlflow.set_experiment(EXPERIMENT)
-        # Sobreescribir artifact location del experimento al crearlo
-        client = MlflowClient(tracking_uri=TRACKING_URI)
         try:
-            exp = client.get_experiment_by_name(EXPERIMENT)
-            if exp is None:
+            if client.get_experiment_by_name(EXPERIMENT) is None:
                 client.create_experiment(EXPERIMENT, artifact_location=ARTIFACT_ROOT)
         except Exception as e:
             log.warning(f"Could not set artifact location: {e}")
 
     mlflow.set_experiment(EXPERIMENT)
+    df  = load_and_preprocess(DATASET_PATH)
+    cv  = KFold(n_splits=5, shuffle=True, random_state=42)
 
-    iris = load_iris(as_frame=True)
-    X, y = iris.data, iris.target
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.25, stratify=y, random_state=42
-    )
-    feature_names = list(iris.feature_names)
-    target_names  = list(iris.target_names)
+    for scenario_id, scenario_label in SCENARIOS.items():
+        df_sc = df[df["Scenario"] == scenario_id].copy()
+        X     = df_sc[FEATURE_NAMES].values
+        log.info(f"\n{'='*60}")
+        log.info(f"Scenario {scenario_id}: {scenario_label}  ({len(df_sc)} rows)")
 
-    log.info(f"Dataset: {X.shape[0]} samples · {X.shape[1]} features · {len(target_names)} classes")
+        for target_alias, target_col in TARGETS.items():
+            y = df_sc[target_col].values
+            X_tr, X_te, y_tr, y_te = train_test_split(
+                X, y, test_size=0.20, random_state=42
+            )
 
-    with mlflow.start_run(run_name="rf-production-v1") as run:
-        run_id = run.info.run_id
-        log.info(f"MLFlow run_id: {run_id}")
+            log.info(f"\n  Target: {target_alias}")
 
-        mlflow.log_params(PARAMS)
-        mlflow.log_param("dataset", "sklearn.datasets.load_iris")
-        mlflow.log_param("test_size", 0.25)
+            # ── Phase 1: evaluate all candidates ─────────────────
+            candidates  = build_candidates()
+            cv_results: dict[str, dict] = {}
+            best_name   = None
+            best_cv_r2  = -np.inf
 
-        clf = RandomForestClassifier(**PARAMS)
-        clf.fit(X_train, y_train)
+            for cand_name, pipe in candidates.items():
+                scores = cross_val_score(pipe, X_tr, y_tr, cv=cv, scoring="r2")
+                cv_results[cand_name] = {
+                    "cv_r2_mean": float(scores.mean()),
+                    "cv_r2_std":  float(scores.std()),
+                }
+                run_name = f"{scenario_label}-{target_alias}-{cand_name}"
+                with mlflow.start_run(run_name=run_name,
+                                      tags={"phase": "comparison",
+                                            "scenario": scenario_label,
+                                            "target": target_alias}):
+                    mlflow.log_params({
+                        "algorithm": cand_name,
+                        "scenario":  scenario_label,
+                        "target":    target_alias,
+                    })
+                    mlflow.log_metrics(cv_results[cand_name])
 
-        y_pred        = clf.predict(X_test)
-        accuracy      = accuracy_score(y_test, y_pred)
-        f1            = f1_score(y_test, y_pred, average="weighted")
-        precision     = precision_score(y_test, y_pred, average="weighted")
-        recall        = recall_score(y_test, y_pred, average="weighted")
-        cv_scores     = cross_val_score(clf, X, y, cv=5, scoring="accuracy")
+                log.info(f"    {cand_name:20s}  cv_r2={scores.mean():.4f} ± {scores.std():.4f}")
 
-        mlflow.log_metrics({
-            "accuracy":    accuracy,
-            "f1_weighted": f1,
-            "precision":   precision,
-            "recall":      recall,
-            "cv_mean":     cv_scores.mean(),
-            "cv_std":      cv_scores.std(),
-        })
+                if scores.mean() > best_cv_r2:
+                    best_cv_r2 = scores.mean()
+                    best_name  = cand_name
 
-        log.info(f"accuracy={accuracy:.4f}  f1={f1:.4f}  cv_mean={cv_scores.mean():.4f}")
-        log.info("\n" + classification_report(y_test, y_pred, target_names=target_names))
+            log.info(f"  >>> Winner: {best_name}  (cv_r2={best_cv_r2:.4f})")
 
-        from mlflow.models import infer_signature
-        signature  = infer_signature(X_train, clf.predict(X_train))
+            # ── Phase 2: fit winner on full train set, register ───
+            winner    = candidates[best_name]
+            winner.fit(X_tr, y_tr)
+            y_pred    = winner.predict(X_te)
+            model_reg = f"hri-{scenario_label}-{target_alias}"
 
-        model_info = mlflow.sklearn.log_model(
-            sk_model=clf,
-            artifact_path="model",
-            registered_model_name=MODEL_NAME,
-            signature=signature,
-            input_example=X_test.iloc[:3],
-        )
-        log.info(f"Model URI: {model_info.model_uri}")
+            feat_rank = feature_ranking(winner, X_te, y_te)
+            metrics = {
+                "cv_r2_mean":    best_cv_r2,
+                "cv_r2_std":     cv_results[best_name]["cv_r2_std"],
+                "ho_r2":         float(r2_score(y_te, y_pred)),
+                "ho_rmse":       float(np.sqrt(mean_squared_error(y_te, y_pred))),
+                "ho_mae":        float(mean_absolute_error(y_te, y_pred)),
+                "ho_smape":      smape(y_te, y_pred),
+                "ho_max_error":  float(sklearn_max_error(y_te, y_pred)),
+            }
+            log.info(
+                f"    ho_r2={metrics['ho_r2']:.4f}  rmse={metrics['ho_rmse']:.4f}"
+                f"  mae={metrics['ho_mae']:.4f}  smape={metrics['ho_smape']:.2f}%"
+                f"  max_err={metrics['ho_max_error']:.4f}"
+            )
+            top_feat = sorted(feat_rank.items(), key=lambda x: x[1]["rank"])
+            log.info("    Feature ranking: " +
+                     "  ".join(f"{n}({v['rank']})" for n, v in top_feat))
 
-    # Promover a Production
-    client   = MlflowClient(tracking_uri=TRACKING_URI)
-    versions = client.search_model_versions(f"name='{MODEL_NAME}'")
-    latest   = sorted(versions, key=lambda v: int(v.version))[-1]
+            with mlflow.start_run(run_name=f"{scenario_label}-{target_alias}",
+                                  tags={"phase": "winner"}):
+                mlflow.log_params({
+                    "algorithm":   best_name,
+                    "scenario":    scenario_label,
+                    "target":      target_alias,
+                    "feature_set": "A",
+                    "n_features":  len(FEATURE_NAMES),
+                    "n_train":     len(X_tr),
+                    "n_test":      len(X_te),
+                    "dataset":     DATASET_PATH,
+                })
+                mlflow.log_metrics(metrics)
+                mlflow.log_dict(feat_rank, "feature_ranking.json")
+                # log all candidates for easy paper comparison
+                for cname, cres in cv_results.items():
+                    mlflow.log_metric(f"cmp_{cname}_cv_r2",
+                                      float(cres["cv_r2_mean"]))
 
-    client.transition_model_version_stage(
-        name=MODEL_NAME,
-        version=latest.version,
-        stage="Production",
-        archive_existing_versions=True,
-    )
-    log.info(f"Model '{MODEL_NAME}' v{latest.version} → Production ✓")
+                sig = infer_signature(X_tr, winner.predict(X_tr))
+                mlflow.sklearn.log_model(
+                    sk_model=winner,
+                    artifact_path="model",
+                    registered_model_name=model_reg,
+                    signature=sig,
+                    input_example=X_te[:3],
+                )
+
+            # ── Phase 3: quality gate + promote ──────────────────
+            r2_ho = metrics["ho_r2"]
+            if r2_ho < QUALITY_GATE:
+                log.warning(f"  Skipping promotion: R2={r2_ho:.4f} < {QUALITY_GATE}")
+                continue
+
+            versions = client.search_model_versions(f"name='{model_reg}'")
+            latest   = sorted(versions, key=lambda v: int(v.version))[-1]
+            client.transition_model_version_stage(
+                name=model_reg,
+                version=latest.version,
+                stage="Production",
+                archive_existing_versions=True,
+            )
+            log.info(f"  '{model_reg}' v{latest.version} ({best_name}) -> Production")
+
+    log.info("\nTraining complete — up to 8 models registered.")
 
 
 if __name__ == "__main__":
     main()
-
-
-def run_quality_gate(clf, X_test, y_test,
-                     min_accuracy: float = 0.90,
-                     min_f1: float = 0.90) -> bool:
-    """
-    Quality gate inline: evalúa el modelo antes de promoverlo.
-    Retorna True si pasa, False si debe bloquearse la promoción.
-    Fundamento: PS111, PS62 en Eken et al. (2025).
-    """
-    from sklearn.metrics import accuracy_score, f1_score
-    y_pred   = clf.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    f1       = f1_score(y_test, y_pred, average="weighted")
-
-    log.info(f"Quality Gate — accuracy={accuracy:.4f} (min={min_accuracy})  "
-             f"f1={f1:.4f} (min={min_f1})")
-
-    passed = accuracy >= min_accuracy and f1 >= min_f1
-    if not passed:
-        log.error("QUALITY GATE FAILED — model will NOT be promoted to Production")
-    else:
-        log.info("Quality Gate PASSED ✓")
-    return passed
