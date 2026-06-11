@@ -1,14 +1,13 @@
 """
 performance_drift_detector.py
 ─────────────────────────────
-Detects performance metric drifts (Accuracy, Precision, Recall, F1)
-using statistical tests (t-test, EWMA) and alerts when significant
-changes are detected.
+Detects performance metric drifts (R², RMSE, MAE) using statistical
+tests (effect size, t-test, EWMA) and alerts when significant changes
+are detected. Agnostic to model type — works with any float metrics.
 """
 
 import numpy as np
-import pandas as pd
-from typing import Dict, Tuple, List, Optional
+from typing import Dict, Tuple, List
 from scipy import stats
 import logging
 
@@ -18,7 +17,7 @@ log = logging.getLogger(__name__)
 class PerformanceDriftDetector:
     """
     Detects performance metric drifts using sliding windows and statistical tests.
-    Compares current window metrics against baseline (reference) metrics.
+    Compares current window metrics against a fixed baseline.
     """
 
     def __init__(
@@ -28,165 +27,110 @@ class PerformanceDriftDetector:
         effect_size_threshold: float = 0.05,
         ewma_alpha: float = 0.3,
     ):
-        """
-        Args:
-            baseline_metrics: Dict with keys (accuracy, precision, recall, f1)
-            p_value_threshold: p-value threshold for t-test (default 0.05)
-            effect_size_threshold: Min % change to flag as drift (default 5%)
-            ewma_alpha: Alpha for EWMA smoothing (default 0.3)
-        """
-        self.baseline_metrics = baseline_metrics
-        self.p_value_threshold = p_value_threshold
+        self.baseline_metrics      = baseline_metrics
+        self.p_value_threshold     = p_value_threshold
         self.effect_size_threshold = effect_size_threshold
-        self.ewma_alpha = ewma_alpha
+        self.ewma_alpha            = ewma_alpha
 
-        # Track history for EWMA
-        self.metric_history = {k: [] for k in baseline_metrics.keys()}
-        self.ewma_values = {k: v for k, v in baseline_metrics.items()}
+        self.metric_history = {k: [] for k in baseline_metrics}
+        self.ewma_values    = dict(baseline_metrics)
 
     @staticmethod
-    def calculate_metrics(
-        y_true: np.ndarray,
-        y_pred: np.ndarray,
-        average: str = "weighted",
-    ) -> Dict[str, float]:
-        """
-        Calculate classification metrics.
-
-        Args:
-            y_true: True labels
-            y_pred: Predicted labels
-            average: Averaging method (weighted, macro, micro)
-
-        Returns:
-            Dict with metrics: accuracy, precision, recall, f1
-        """
-        from sklearn.metrics import (
-            accuracy_score,
-            precision_score,
-            recall_score,
-            f1_score,
-        )
-
+    def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+        """Calculate regression metrics: R², RMSE, MAE."""
+        from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+        y_true = np.asarray(y_true, dtype=float)
+        y_pred = np.asarray(y_pred, dtype=float)
         return {
-            "accuracy": accuracy_score(y_true, y_pred),
-            "precision": precision_score(y_true, y_pred, average=average, zero_division=0),
-            "recall": recall_score(y_true, y_pred, average=average, zero_division=0),
-            "f1": f1_score(y_true, y_pred, average=average, zero_division=0),
+            "r2":   float(r2_score(y_true, y_pred)),
+            "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
+            "mae":  float(mean_absolute_error(y_true, y_pred)),
         }
 
-    def detect_drift(
-        self,
-        current_metrics: Dict[str, float],
-    ) -> Tuple[bool, Dict[str, any]]:
+    def detect_drift(self, current_metrics: Dict[str, float]) -> Tuple[bool, Dict]:
         """
-        Detect if current metrics show significant drift from baseline.
+        Detect drift using three tests:
+          1. Effect size: |current - baseline| > threshold
+          2. T-test:      one-sample t-test against baseline (≥5 observations)
+          3. EWMA:        sustained deviation via exponential moving average
 
-        Uses:
-        1. Effect size check: |current - baseline| > threshold
-        2. T-test: Compares current window against historical baseline
-        3. EWMA trend: Exponential moving average to detect sustained changes
-
-        Args:
-            current_metrics: Dict with current window metrics
-
-        Returns:
-            (is_drift, details_dict)
+        Returns (is_drift, details_dict). Drift requires ≥2 metrics flagged.
         """
         details = {
             "drift_detected": False,
-            "metrics": current_metrics,
-            "baseline": self.baseline_metrics,
-            "tests": {},
+            "metrics":        current_metrics,
+            "baseline":       self.baseline_metrics,
+            "tests":          {},
             "drifted_metrics": [],
         }
-
         drifted_count = 0
 
-        for metric_name, current_value in current_metrics.items():
-            baseline_value = self.baseline_metrics.get(metric_name)
-            if baseline_value is None:
+        for name, current in current_metrics.items():
+            baseline = self.baseline_metrics.get(name)
+            if baseline is None:
                 continue
 
-            self.metric_history[metric_name].append(current_value)
+            self.metric_history[name].append(current)
+            history    = self.metric_history[name]
+            abs_change = abs(current - baseline)
 
-            # Ensure we have enough history for t-test
-            history = self.metric_history[metric_name]
-            test_result = {
-                "current": current_value,
-                "baseline": baseline_value,
-                "change_pct": round(
-                    100 * (current_value - baseline_value) / (baseline_value + 1e-6), 2
-                ),
-                "drift": False,
-                "reason": None,
+            result = {
+                "current":    current,
+                "baseline":   baseline,
+                "change_pct": round(100 * (current - baseline) / (abs(baseline) + 1e-9), 2),
+                "drift":      False,
+                "reason":     None,
             }
 
-            # 1. Effect size check
-            abs_change = abs(current_value - baseline_value)
+            # 1. Effect size
             if abs_change > self.effect_size_threshold:
-                test_result["drift"] = True
-                test_result["reason"] = (
-                    f"Effect size ({abs_change:.4f}) exceeds threshold ({self.effect_size_threshold})"
-                )
-                drifted_count += 1
+                result["drift"]  = True
+                result["reason"] = f"effect_size={abs_change:.4f} > {self.effect_size_threshold}"
+                drifted_count   += 1
 
-            # 2. T-test if we have enough history (min 5 samples)
-            if len(history) >= 5 and not test_result["drift"]:
-                # One-sample t-test: is current mean different from baseline?
-                t_stat, p_val = stats.ttest_1samp(history[-5:], baseline_value)
-                test_result["t_stat"] = round(t_stat, 4)
-                test_result["p_value"] = round(p_val, 4)
-
+            # 2. T-test (min 5 observations)
+            if len(history) >= 5 and not result["drift"]:
+                t_stat, p_val = stats.ttest_1samp(history[-5:], baseline)
+                result["t_stat"]  = round(t_stat, 4)
+                result["p_value"] = round(p_val, 4)
                 if p_val < self.p_value_threshold and abs_change > 0.02:
-                    test_result["drift"] = True
-                    test_result["reason"] = (
-                        f"t-test p={p_val:.4f} < {self.p_value_threshold} "
-                        f"(change: {abs_change:.4f})"
-                    )
-                    drifted_count += 1
+                    result["drift"]  = True
+                    result["reason"] = f"t-test p={p_val:.4f} < {self.p_value_threshold}"
+                    drifted_count   += 1
 
-            # 3. EWMA trend
-            self.ewma_values[metric_name] = (
-                self.ewma_alpha * current_value
-                + (1 - self.ewma_alpha) * self.ewma_values[metric_name]
+            # 3. EWMA
+            self.ewma_values[name] = (
+                self.ewma_alpha * current
+                + (1 - self.ewma_alpha) * self.ewma_values[name]
             )
-            ewma_change = abs(self.ewma_values[metric_name] - baseline_value)
+            ewma_change = abs(self.ewma_values[name] - baseline)
+            result["ewma"] = round(self.ewma_values[name], 4)
+            if ewma_change > 0.07 and not result["drift"]:
+                result["drift"]  = True
+                result["reason"] = f"EWMA divergence={ewma_change:.4f}"
+                drifted_count   += 1
 
-            if ewma_change > 0.07 and not test_result["drift"]:
-                test_result["drift"] = True
-                test_result["reason"] = (
-                    f"EWMA divergence ({ewma_change:.4f}) indicates sustained trend"
-                )
-                drifted_count += 1
+            details["tests"][name] = result
+            if result["drift"]:
+                details["drifted_metrics"].append(name)
 
-            test_result["ewma"] = round(self.ewma_values[metric_name], 4)
-            details["tests"][metric_name] = test_result
-
-            if test_result["drift"]:
-                details["drifted_metrics"].append(metric_name)
-
-        # Overall drift: if >= 2 metrics show drift
         details["drift_detected"] = drifted_count >= 2
-        details["drifted_count"] = drifted_count
-        details["total_metrics"] = len(current_metrics)
-
+        details["drifted_count"]  = drifted_count
+        details["total_metrics"]  = len(current_metrics)
         return details["drift_detected"], details
 
     def get_history(self, metric_name: str) -> List[float]:
-        """Get historical values for a metric."""
         return self.metric_history.get(metric_name, [])
 
     def reset_history(self):
-        """Reset metric history while keeping baseline."""
-        for k in self.metric_history.keys():
+        for k in self.metric_history:
             self.metric_history[k] = []
 
 
 class PerformanceDriftMonitor:
     """
-    Wrapper that tracks performance metrics over time and manages
-    multiple drift detectors for sliding windows.
+    Buffers predictions + ground truth and runs PerformanceDriftDetector
+    over sliding windows to detect sustained performance degradation.
     """
 
     def __init__(
@@ -196,51 +140,28 @@ class PerformanceDriftMonitor:
         num_windows: int = 3,
         **detector_kwargs,
     ):
-        """
-        Args:
-            baseline_metrics: Reference metrics
-            window_size: Size of each sliding window
-            num_windows: Number of detectors for different windows
-            **detector_kwargs: Passed to PerformanceDriftDetector
-        """
-        self.baseline_metrics = baseline_metrics
-        self.window_size = window_size
-        self.detectors = [
+        self.baseline_metrics    = baseline_metrics
+        self.window_size         = window_size
+        self.detectors           = [
             PerformanceDriftDetector(baseline_metrics, **detector_kwargs)
             for _ in range(num_windows)
         ]
-        self.predictions_buffer = []
-        self.labels_buffer = []
+        self.predictions_buffer: list = []
+        self.labels_buffer:      list = []
 
     def add_batch(self, y_pred: np.ndarray, y_true: np.ndarray):
-        """
-        Add predictions and labels to buffer.
+        self.predictions_buffer.extend(np.asarray(y_pred, dtype=float))
+        self.labels_buffer.extend(np.asarray(y_true, dtype=float))
 
-        Args:
-            y_pred: Predictions
-            y_true: True labels
-        """
-        self.predictions_buffer.extend(y_pred)
-        self.labels_buffer.extend(y_true)
-
-    def check_drift(self) -> Tuple[bool, List[Dict]]:
-        """
-        Check if current buffer shows performance drift.
-        Uses rotating detectors on sliding windows.
-
-        Returns:
-            (any_drift_detected, [detector_results, ...])
-        """
+    def check_drift(self) -> Tuple[bool, list]:
         if len(self.predictions_buffer) < self.window_size:
             return False, []
 
-        # Use last window_size samples
-        y_pred = np.array(self.predictions_buffer[-self.window_size :])
-        y_true = np.array(self.labels_buffer[-self.window_size :])
+        y_pred = np.array(self.predictions_buffer[-self.window_size:])
+        y_true = np.array(self.labels_buffer[-self.window_size:])
 
         current_metrics = PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
-
-        results = []
+        results  = []
         any_drift = False
 
         for i, detector in enumerate(self.detectors):
@@ -253,6 +174,5 @@ class PerformanceDriftMonitor:
         return any_drift, results
 
     def reset_buffer(self):
-        """Clear buffers after checking."""
         self.predictions_buffer = []
-        self.labels_buffer = []
+        self.labels_buffer      = []

@@ -1,102 +1,70 @@
 """
-detector.py  -  Drift Detection Service
+detector.py  —  Drift Detection Service (HRI Regression)
+
+Monitors two types of drift every CHECK_INTERVAL_S seconds:
+  • Data drift:    KS test on each input feature vs. training distribution.
+  • Concept drift: KS test on prediction values vs. reference predictions.
+  • Perf drift:    PerformanceDriftDetector on R²/RMSE/MAE (requires ground truth).
+
+When CONSECUTIVE_DRIFT_WINDOWS consecutive windows flag drift, triggers
+champion/challenger retraining via retrain_trigger.trigger().
 """
 
-import os
-import sys
-import time
-import logging
-import traceback
-
-# ── test de imports al inicio ──────────────────────────────────────────────
+import os, sys, time, logging, traceback
 print("=== DRIFT DETECTOR STARTING ===", flush=True)
-print(f"Python: {sys.version}", flush=True)
 
 try:
     import numpy as np
-    print(f"numpy {np.__version__} OK", flush=True)
-except Exception as e:
-    print(f"IMPORT ERROR numpy: {e}", flush=True)
-    sys.exit(1)
-
-try:
     import pandas as pd
-    print(f"pandas {pd.__version__} OK", flush=True)
-except Exception as e:
-    print(f"IMPORT ERROR pandas: {e}", flush=True)
-    sys.exit(1)
-
-try:
     from scipy import stats
-    print("scipy OK", flush=True)
-except Exception as e:
-    print(f"IMPORT ERROR scipy: {e}", flush=True)
-    sys.exit(1)
-
-try:
     import mlflow
     from mlflow import MlflowClient
-    print(f"mlflow {mlflow.__version__} OK", flush=True)
-except Exception as e:
-    print(f"IMPORT ERROR mlflow: {e}", flush=True)
-    sys.exit(1)
-
-try:
-    from sklearn.datasets import load_iris
-    from sklearn.ensemble import RandomForestClassifier
-    print("sklearn OK", flush=True)
-except Exception as e:
-    print(f"IMPORT ERROR sklearn: {e}", flush=True)
-    sys.exit(1)
-
-try:
     import retrain_trigger
-    print("retrain_trigger OK", flush=True)
-except Exception as e:
-    print(f"IMPORT ERROR retrain_trigger: {e}", flush=True)
-    sys.exit(1)
-
-try:
     from performance_drift_detector import PerformanceDriftDetector, PerformanceDriftMonitor
-    print("performance_drift_detector OK", flush=True)
+    print("All imports OK", flush=True)
 except Exception as e:
-    print(f"IMPORT ERROR performance_drift_detector: {e}", flush=True)
+    print(f"IMPORT ERROR: {e}", flush=True)
     sys.exit(1)
 
-print("=== ALL IMPORTS OK ===", flush=True)
-
-# ── logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [DRIFT] %(levelname)s %(message)s",
-    stream=sys.stdout,
-    force=True,
+    stream=sys.stdout, force=True,
 )
 log = logging.getLogger(__name__)
 
-# ── config ─────────────────────────────────────────────────────────────────
-MLFLOW_URI   = os.environ.get("MLFLOW_TRACKING_URI",      "http://mlflow:5001")
-INFER_URL    = os.environ.get("INFERENCE_API_URL",         "http://inference-api:8000")
-KS_THR       = float(os.environ.get("KS_P_VALUE_THRESHOLD",   "0.05"))
-CHI2_THR     = float(os.environ.get("CHI2_P_VALUE_THRESHOLD",  "0.05"))
+# ── config ────────────────────────────────────────────────────────────────────
+MLFLOW_URI   = os.environ.get("MLFLOW_TRACKING_URI",       "http://mlflow:5001")
+INFER_URL    = os.environ.get("INFERENCE_API_URL",          "http://inference-api:8000")
+DATASET_PATH = os.environ.get("DATASET_PATH",               "/data/simulation_all.csv")
+KS_THR       = float(os.environ.get("KS_P_VALUE_THRESHOLD",    "0.05"))
 CONSEC_NEED  = int(os.environ.get("CONSECUTIVE_DRIFT_WINDOWS", "2"))
-WIN_SIZE     = int(os.environ.get("WINDOW_SIZE",               "30"))
-INTERVAL_S   = int(os.environ.get("CHECK_INTERVAL_S",          "30"))
-MODEL_NAME   = os.environ.get("MODEL_NAME", "iris-classifier")
+WIN_SIZE     = int(os.environ.get("WINDOW_SIZE",                "30"))
+INTERVAL_S   = int(os.environ.get("CHECK_INTERVAL_S",           "30"))
 
-# Performance Drift Detection Config
-ENABLE_PERF_DRIFT   = os.environ.get("ENABLE_PERFORMANCE_DRIFT", "true").lower() == "true"
-PERF_DRIFT_THR      = float(os.environ.get("PERF_DRIFT_EFFECT_SIZE", "0.05"))
-PERF_DRIFT_P_VALUE  = float(os.environ.get("PERF_DRIFT_P_VALUE", "0.05"))
-PERF_CONSEC_NEED    = int(os.environ.get("PERF_DRIFT_CONSECUTIVE", "2"))
+ENABLE_PERF_DRIFT  = os.environ.get("ENABLE_PERFORMANCE_DRIFT", "true").lower() == "true"
+PERF_DRIFT_THR     = float(os.environ.get("PERF_DRIFT_EFFECT_SIZE", "0.05"))
+PERF_DRIFT_P_VALUE = float(os.environ.get("PERF_DRIFT_P_VALUE",     "0.05"))
+PERF_CONSEC_NEED   = int(os.environ.get("PERF_DRIFT_CONSECUTIVE",   "2"))
 
-FEATURES = [
-    "sepal length (cm)", "sepal width (cm)",
-    "petal length (cm)", "petal width (cm)",
-]
+SCENARIOS     = {0: "HumanOnly", 1: "WithRobot"}
+FEATURE_NAMES = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
+TARGETS = {
+    "TotalRecollected": "TotalRecollectedCrops_crop_units",
+    "CargoZoneProd":    "TotalProductionCargoZone_crop_units",
+    "TotalWorkload":    "TotalHumanWorkload_kcal",
+    "AvgProduction":    "AverageHumanProduction_crop_units",
+}
+
+# Valid discrete values per feature (for synthetic data generation)
+VALID_HUMANS    = [1, 3, 6, 8, 10, 12]
+VALID_ROWS      = [1, 2, 3]
+VALID_ACTIVITIES = ["harv_ground", "harv_ladder", "harv_mixed", "harv_picker"]
 
 
-def wait_for(url, label, retries=30, delay=4):
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def wait_for(url: str, label: str, retries: int = 30, delay: int = 4) -> bool:
     import urllib.request
     log.info(f"Waiting for {label} at {url} ...")
     for i in range(retries):
@@ -111,108 +79,208 @@ def wait_for(url, label, retries=30, delay=4):
     return False
 
 
-def build_reference():
-    iris = load_iris(as_frame=True)
-    X    = iris.data
-    ref  = {f: X[f].values for f in FEATURES}
-    counts = np.bincount(iris.target.values, minlength=3).astype(float)
-    ref["class_dist"] = counts / counts.sum()
-    log.info(f"Reference: {len(X)} samples, class_dist={ref['class_dist'].round(3)}")
+def _load_preprocessed() -> pd.DataFrame:
+    df = pd.read_csv(DATASET_PATH)
+    dummies = pd.get_dummies(df["MainActivity"], prefix="Act", drop_first=True)
+    dummies = dummies.rename(columns={
+        "Act_harv_ladder": "Act_Ladder",
+        "Act_harv_mixed":  "Act_Mixed",
+        "Act_harv_picker": "Act_Picker",
+    })
+    for col in ["Act_Ladder", "Act_Mixed", "Act_Picker"]:
+        if col not in dummies.columns:
+            dummies[col] = 0
+    return pd.concat([df, dummies[["Act_Ladder", "Act_Mixed", "Act_Picker"]]], axis=1)
+
+
+def _predict_api(scenario: int, workers: int, crop_row: int,
+                 rand_pos: int, activity: str) -> dict | None:
+    import urllib.request, json as _json
+    body = _json.dumps({
+        "scenario": scenario, "workers": workers,
+        "crop_row": crop_row, "rand_pos": rand_pos, "activity": activity,
+    }).encode()
+    req = urllib.request.Request(
+        f"{INFER_URL}/predict", data=body,
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return _json.loads(r.read())
+    except Exception:
+        return None
+
+
+def _activity_from_row(row: pd.Series) -> str:
+    if row.get("Act_Ladder", 0) > 0.5: return "harv_ladder"
+    if row.get("Act_Mixed",  0) > 0.5: return "harv_mixed"
+    if row.get("Act_Picker", 0) > 0.5: return "harv_picker"
+    return "harv_ground"
+
+
+# ── reference building ────────────────────────────────────────────────────────
+
+def build_reference(df: pd.DataFrame) -> dict:
+    """
+    Builds reference distributions from the training dataset.
+    Also queries the inference API for a reference prediction distribution.
+    """
+    ref = {feat: df[feat].values for feat in FEATURE_NAMES}
+
+    # Build reference prediction distribution (TotalRecollected, scenario 0)
+    ref_preds = []
+    sample = df[df["Scenario"] == 0].sample(min(WIN_SIZE, len(df)), replace=False)
+    for _, row in sample.iterrows():
+        resp = _predict_api(
+            scenario=0,
+            workers=int(row["Humans"]),
+            crop_row=int(row["ROW_N"]),
+            rand_pos=int(row["RandomPosition"]),
+            activity=_activity_from_row(row),
+        )
+        if resp:
+            ref_preds.append(resp.get("total_recollected", 0.0))
+
+    ref["pred_dist"] = np.array(ref_preds) if ref_preds else None
+    log.info(f"Reference: {len(df)} rows | API reference predictions: {len(ref_preds)}")
     return ref
 
 
+def build_baseline_metrics(df: pd.DataFrame) -> dict:
+    """
+    Returns baseline R²/RMSE/MAE from MLflow production model.
+    Falls back to a conservative default if MLflow is unavailable.
+    """
+    try:
+        import mlflow.sklearn
+        from sklearn.model_selection import train_test_split
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        model = mlflow.sklearn.load_model(
+            "models:/hri-HumanOnly-TotalRecollected/Production"
+        )
+        df_sc = df[df["Scenario"] == 0]
+        X = df_sc[FEATURE_NAMES].values
+        y = df_sc["TotalRecollectedCrops_crop_units"].values
+        _, X_te, _, y_te = train_test_split(X, y, test_size=0.20, random_state=42)
+        return PerformanceDriftDetector.calculate_metrics(y_te, model.predict(X_te))
+    except Exception as e:
+        log.warning(f"Could not load model for baseline: {e} — using defaults")
+        return {"r2": 0.90, "rmse": 20.0, "mae": 15.0}
+
+
+# ── production buffer ─────────────────────────────────────────────────────────
+
 class ProductionBuffer:
-    def __init__(self):
-        self.rows  = []
-        self.preds = []
-        self.cycle = 0
+    """
+    Simulates a production data window by sampling from the training dataset.
+    In later cycles (cycle >= 3), injects synthetic drift to test detection.
+    Calls the inference API for real predictions; falls back to dataset values.
+    """
+
+    def __init__(self, df: pd.DataFrame, cycle: int = 0):
+        self.df    = df
+        self.cycle = cycle
+        self.feat_rows: list = []
+        self.pred_vals: list = []
 
     def fill(self):
-        import random
-        iris = load_iris(as_frame=True)
-        X    = iris.data
-        self.rows  = []
-        self.preds = []
-        for _ in range(WIN_SIZE):
-            row = X.sample(1).values[0].copy()
+        sample = self.df.sample(WIN_SIZE, replace=True).reset_index(drop=True)
+        self.feat_rows = []
+        self.pred_vals = []
+
+        for _, row in sample.iterrows():
+            feat = row[FEATURE_NAMES].values.astype(float).copy()
+
+            # Inject drift: shift Humans and ROW_N in later cycles
             if self.cycle >= 3:
-                mag    = (self.cycle - 2) * 0.9
-                row[2] += mag
-                row[3] += mag
-                label  = 2 if random.random() < 0.85 else random.randint(0, 1)
-            else:
-                label = random.randint(0, 2)
-            self.rows.append(row)
-            self.preds.append(label)
+                mag      = (self.cycle - 2) * 0.5
+                feat[0]  = float(np.clip(feat[0] + np.random.randn() * mag, 1, 12))
+                feat[1]  = float(np.clip(feat[1] + np.random.randn() * 0.3, 1, 3))
 
-    def df(self):
-        return pd.DataFrame(self.rows, columns=FEATURES)
+            self.feat_rows.append(feat)
 
-    def predictions(self):
-        return np.array(self.preds)
+            # Try real API prediction
+            resp = _predict_api(
+                scenario=int(row.get("Scenario", 0)),
+                workers=int(np.clip(round(feat[0]), 1, 12)),
+                crop_row=int(np.clip(round(feat[1]), 1, 3)),
+                rand_pos=int(round(feat[2])),
+                activity=_activity_from_row(row),
+            )
+            pred = resp.get("total_recollected", 0.0) if resp else \
+                   float(row.get("TotalRecollectedCrops_crop_units", 0.0))
+            self.pred_vals.append(pred)
+
+    def features_df(self) -> pd.DataFrame:
+        return pd.DataFrame(self.feat_rows, columns=FEATURE_NAMES)
+
+    def predictions(self) -> np.ndarray:
+        return np.array(self.pred_vals)
+
+    def ground_truth(self, target_col: str = "TotalRecollectedCrops_crop_units") -> np.ndarray:
+        sample = self.df.sample(len(self.feat_rows), replace=True)
+        return sample[target_col].values
 
 
-def run_cycle(cycle, ref, consec):
+# ── drift cycles ──────────────────────────────────────────────────────────────
+
+def run_cycle(cycle: int, ref: dict, df: pd.DataFrame, consec: int) -> int:
     log.info(f"--- Cycle {cycle}  (drift_phase={cycle >= 3}) ---")
 
-    buf = ProductionBuffer()
-    buf.cycle = cycle
+    buf = ProductionBuffer(df, cycle)
     buf.fill()
+    feat_df = buf.features_df()
+    preds   = buf.predictions()
 
-    df    = buf.df()
-    preds = buf.predictions()
-
-    # KS test por feature
-    data_drifted = False
+    # ── Data drift: KS per feature ────────────────────────────────────────────
+    data_drifted  = False
     drifted_feats = []
-    for feat in FEATURES:
-        stat, pval = stats.ks_2samp(ref[feat], df[feat].values)
-        drifted    = pval < KS_THR
-        if drifted:
+    for feat in FEATURE_NAMES:
+        stat, pval = stats.ks_2samp(ref[feat], feat_df[feat].values)
+        if pval < KS_THR:
             data_drifted = True
             drifted_feats.append(feat)
-        log.info(f"  KS [{feat}]: stat={stat:.4f} pval={pval:.4f} drift={drifted}")
+        log.info(f"  KS [{feat:18s}]: stat={stat:.4f}  pval={pval:.4f}  "
+                 f"drift={'YES' if pval < KS_THR else 'no'}")
 
-    # Chi2 sobre predicciones
-    observed = np.bincount(preds, minlength=3).astype(float)
-    expected = np.maximum(ref["class_dist"] * len(preds), 1e-6)
-    chi2_stat, chi2_pval = stats.chisquare(observed, f_exp=expected)
-    concept_drifted = chi2_pval < CHI2_THR
-    log.info(f"  Chi2: stat={chi2_stat:.4f} pval={chi2_pval:.4f} drift={concept_drifted}")
-    log.info(f"  Pred dist: obs={( observed/observed.sum() ).round(3).tolist()}")
+    # ── Concept drift: KS on predictions ─────────────────────────────────────
+    concept_drifted = False
+    pred_ks_pval    = 1.0
+    ref_preds = ref.get("pred_dist")
+    if ref_preds is not None and len(ref_preds) >= 5 and len(preds) >= 5:
+        stat, pred_ks_pval = stats.ks_2samp(ref_preds, preds)
+        concept_drifted    = pred_ks_pval < KS_THR
+        log.info(f"  KS [predictions  ]: stat={stat:.4f}  pval={pred_ks_pval:.4f}  "
+                 f"drift={'YES' if concept_drifted else 'no'}")
 
     any_drift = data_drifted or concept_drifted
-    if any_drift:
-        consec += 1
-    else:
-        consec  = 0
+    consec    = consec + 1 if any_drift else 0
 
-    status = "DRIFT ⚠" if any_drift else "OK ✓"
-    log.info(f"  Status: {status}  consecutive={consec}/{CONSEC_NEED}")
+    log.info(f"  Status: {'DRIFT ⚠' if any_drift else 'OK ✓'}  "
+             f"consecutive={consec}/{CONSEC_NEED}")
 
-    # Registrar en MLFlow
+    # ── Log to MLflow ─────────────────────────────────────────────────────────
     try:
         mlflow.set_tracking_uri(MLFLOW_URI)
         mlflow.set_experiment("drift-monitoring")
         with mlflow.start_run(run_name=f"window-{cycle:03d}"):
-            for feat in FEATURES:
-                s = feat.replace(" ","_").replace("(","").replace(")","").replace("/","_")
-                stat_v, pval_v = stats.ks_2samp(ref[feat], df[feat].values)
+            for feat in FEATURE_NAMES:
+                s = feat.replace(" ", "_")
+                stat_v, pval_v = stats.ks_2samp(ref[feat], feat_df[feat].values)
                 mlflow.log_metric(f"ks_stat_{s}", float(stat_v))
                 mlflow.log_metric(f"ks_pval_{s}", float(pval_v))
-            mlflow.log_metric("chi2_pval",      float(chi2_pval))
-            mlflow.log_metric("data_drift",     int(data_drifted))
-            mlflow.log_metric("concept_drift",  int(concept_drifted))
-            mlflow.log_metric("consec_drifts",  consec)
+            mlflow.log_metric("pred_ks_pval",  float(pred_ks_pval))
+            mlflow.log_metric("data_drift",    int(data_drifted))
+            mlflow.log_metric("concept_drift", int(concept_drifted))
+            mlflow.log_metric("consec_drifts", consec)
             mlflow.log_params({
-                "cycle": cycle, "window_size": WIN_SIZE,
-                "ks_thr": KS_THR, "chi2_thr": CHI2_THR,
+                "cycle": cycle, "window_size": WIN_SIZE, "ks_thr": KS_THR,
             })
-        log.info("  MLFlow run logged ✓")
+        log.info("  MLflow run logged ✓")
     except Exception:
-        log.error(f"  MLFlow logging failed:\n{traceback.format_exc()}")
+        log.error(f"  MLflow logging failed:\n{traceback.format_exc()}")
 
-    # Reentrenar si se cumple el umbral
+    # ── Trigger retrain ───────────────────────────────────────────────────────
     if consec >= CONSEC_NEED:
         log.warning(f"  RETRAINING TRIGGERED (consecutive={consec})")
         try:
@@ -228,143 +296,97 @@ def run_cycle(cycle, ref, consec):
     return consec
 
 
-def build_baseline_metrics():
-    """Build baseline performance metrics from reference Iris dataset."""
-    from sklearn.model_selection import train_test_split
-    
-    iris = load_iris(as_frame=True)
-    X, y = iris.data, iris.target
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.25, stratify=y, random_state=42
-    )
-    
-    clf = RandomForestClassifier(n_estimators=100, random_state=42)
-    clf.fit(X_train, y_train)
-    y_pred = clf.predict(X_test)
-    
-    return PerformanceDriftDetector.calculate_metrics(y_test, y_pred)
-
-
-def run_performance_drift_cycle(cycle, perf_consec):
-    """
-    Check performance metrics for drift.
-    Uses ProductionBuffer to simulate real predictions and ground truth.
-    """
-    log.info(f"--- Performance Drift Cycle {cycle} ---")
-    
+def run_performance_drift_cycle(
+    cycle: int,
+    perf_monitor: PerformanceDriftMonitor,
+    df: pd.DataFrame,
+) -> int:
     if not ENABLE_PERF_DRIFT:
-        return perf_consec
-    
-    try:
-        # Get baseline metrics
-        baseline_metrics = build_baseline_metrics()
-        log.info(f"Baseline metrics: {baseline_metrics}")
-        
-        detector = PerformanceDriftDetector(
-            baseline_metrics,
-            p_value_threshold=PERF_DRIFT_P_VALUE,
-            effect_size_threshold=PERF_DRIFT_THR,
-        )
-        
-        # Simulate production buffer (in real scenario, this comes from inference logs)
-        buf = ProductionBuffer()
-        buf.cycle = cycle
-        buf.fill()
-        
-        y_pred = buf.predictions()
-        y_true = np.array([0, 1, 2] * (len(y_pred) // 3))[:len(y_pred)]  # Simulated labels
-        
-        # Calculate current metrics
-        current_metrics = PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
-        log.info(f"Current metrics: {current_metrics}")
-        
-        # Detect drift
-        drift, details = detector.detect_drift(current_metrics)
-        
-        if drift:
-            perf_consec += 1
-        else:
-            perf_consec = 0
-        
-        status = "DRIFT ⚠" if drift else "OK ✓"
-        log.info(f"  Performance Status: {status}  consecutive={perf_consec}/{PERF_CONSEC_NEED}")
-        
-        # Log to MLFlow
-        try:
-            mlflow.set_tracking_uri(MLFLOW_URI)
-            mlflow.set_experiment("performance-drift-monitoring")
-            with mlflow.start_run(run_name=f"perf-window-{cycle:03d}"):
-                for metric_name, value in current_metrics.items():
-                    mlflow.log_metric(f"current_{metric_name}", float(value))
-                
-                if "tests" in details:
-                    for metric_name, test_result in details["tests"].items():
-                        mlflow.log_metric(f"baseline_{metric_name}", 
-                                        float(test_result["baseline"]))
-                        mlflow.log_metric(f"change_pct_{metric_name}", 
-                                        float(test_result["change_pct"]))
-                        if "p_value" in test_result:
-                            mlflow.log_metric(f"ttest_pval_{metric_name}", 
-                                            float(test_result["p_value"]))
-                
-                mlflow.log_metric("perf_drift_detected", int(drift))
-                mlflow.log_metric("perf_consec_drifts", perf_consec)
-                mlflow.log_params({
-                    "cycle": cycle,
-                    "effect_size_thr": PERF_DRIFT_THR,
-                    "p_value_thr": PERF_DRIFT_P_VALUE,
-                })
-            
-            log.info("  Performance metrics logged to MLFlow ✓")
-        except Exception:
-            log.warning(f"  MLFlow performance logging skipped: {traceback.format_exc()}")
-        
-        # Trigger retraining if consecutive drifts threshold met
-        if perf_consec >= PERF_CONSEC_NEED:
-            log.warning(f"  PERFORMANCE DRIFT RETRAINING TRIGGERED (consecutive={perf_consec})")
-            try:
-                retrain_trigger.trigger(
-                    reason="performance_drift",
-                    consecutive_windows=perf_consec,
-                    mlflow_uri=MLFLOW_URI,
-                )
-                perf_consec = 0
-            except Exception:
-                log.error(f"  Retrain failed: {traceback.format_exc()}")
-        
-        return perf_consec
-    
-    except Exception:
-        log.error(f"  Unhandled error in perf drift cycle: {traceback.format_exc()}")
-        return perf_consec
+        return 0
 
+    log.info(f"--- Performance Drift Cycle {cycle} ---")
+    try:
+        df_sc  = df[df["Scenario"] == 0].sample(min(WIN_SIZE, len(df)), replace=True)
+        y_true = df_sc["TotalRecollectedCrops_crop_units"].values.astype(float)
+
+        # Simulate predictions: stable early, degraded later
+        if cycle < 3:
+            y_pred = y_true + np.random.randn(len(y_true)) * 5.0
+        else:
+            bias   = (cycle - 2) * 10.0
+            y_pred = y_true * 0.75 + np.random.randn(len(y_true)) * 20.0 + bias
+
+        perf_monitor.add_batch(y_pred, y_true)
+        drift, results = perf_monitor.check_drift()
+
+        if results:
+            metrics = results[0].get("metrics", {})
+            log.info(f"  Perf drift={drift}  R²={metrics.get('r2', 'N/A'):.4f}  "
+                     f"RMSE={metrics.get('rmse', 'N/A'):.2f}")
+
+            try:
+                mlflow.set_tracking_uri(MLFLOW_URI)
+                mlflow.set_experiment("performance-drift-monitoring")
+                with mlflow.start_run(run_name=f"perf-window-{cycle:03d}"):
+                    for k, v in metrics.items():
+                        mlflow.log_metric(f"current_{k}", float(v))
+                    mlflow.log_metric("perf_drift_detected", int(drift))
+                    mlflow.log_param("cycle", cycle)
+            except Exception:
+                log.warning("MLflow performance logging failed")
+
+        return int(drift)
+    except Exception:
+        log.error(f"  Perf drift error:\n{traceback.format_exc()}")
+        return 0
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    log.info("Drift Detector ready")
-    log.info(f"  MLFLOW_URI={MLFLOW_URI}")
-    log.info(f"  WIN_SIZE={WIN_SIZE}  INTERVAL={INTERVAL_S}s  CONSEC_NEED={CONSEC_NEED}")
-    if ENABLE_PERF_DRIFT:
-        log.info(f"  PERFORMANCE DRIFT DETECTION ENABLED")
-        log.info(f"    Effect size threshold: {PERF_DRIFT_THR}")
-        log.info(f"    P-value threshold: {PERF_DRIFT_P_VALUE}")
-        log.info(f"    Consecutive threshold: {PERF_CONSEC_NEED}")
+    log.info("Drift Detector — HRI Regression mode")
+    log.info(f"  MLFLOW_URI={MLFLOW_URI}  WIN_SIZE={WIN_SIZE}  INTERVAL={INTERVAL_S}s")
 
-    wait_for(f"{MLFLOW_URI}/", "MLFlow")
+    wait_for(f"{MLFLOW_URI}/",     "MLflow")
     wait_for(f"{INFER_URL}/health", "InferenceAPI", retries=10, delay=3)
 
-    ref    = build_reference()
-    consec = 0
+    df  = _load_preprocessed()
+    ref = build_reference(df)
+
+    baseline_metrics = build_baseline_metrics(df)
+    log.info(f"Baseline metrics: {baseline_metrics}")
+
+    perf_monitor = PerformanceDriftMonitor(
+        baseline_metrics,
+        window_size=WIN_SIZE,
+        num_windows=3,
+        effect_size_threshold=PERF_DRIFT_THR,
+        p_value_threshold=PERF_DRIFT_P_VALUE,
+    )
+
+    consec      = 0
     perf_consec = 0
-    cycle  = 0
+    cycle       = 0
 
     while True:
         try:
-            consec = run_cycle(cycle, ref, consec)
-            
-            if ENABLE_PERF_DRIFT:
-                perf_consec = run_performance_drift_cycle(cycle, perf_consec)
+            consec      = run_cycle(cycle, ref, df, consec)
+            perf_consec += run_performance_drift_cycle(cycle, perf_monitor, df)
+            if perf_consec >= PERF_CONSEC_NEED:
+                log.warning(f"  PERFORMANCE DRIFT RETRAINING TRIGGERED")
+                try:
+                    retrain_trigger.trigger(
+                        reason="performance_drift",
+                        consecutive_windows=perf_consec,
+                        mlflow_uri=MLFLOW_URI,
+                    )
+                    perf_consec = 0
+                    perf_monitor.reset_buffer()
+                except Exception:
+                    log.error(traceback.format_exc())
         except Exception:
             log.error(f"Unhandled error in cycle {cycle}:\n{traceback.format_exc()}")
+
         cycle += 1
         log.info(f"  Next cycle in {INTERVAL_S}s ...")
         time.sleep(INTERVAL_S)

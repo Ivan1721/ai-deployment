@@ -1,387 +1,205 @@
 """
 test_performance_drift_integration.py
 ──────────────────────────────────────
-Integration tests for performance drift detection.
-Tests with MLFlow logging, realistic drift scenarios, and end-to-end flows.
+Integration tests for PerformanceDriftDetector with regression scenarios.
+Tests realistic drift patterns (gradual degradation, sudden shift, recovery).
 """
 
 import os
 import pytest
 import numpy as np
 import logging
-from sklearn.datasets import load_iris
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
 
 log = logging.getLogger(__name__)
 
-# Import detector
-from performance_drift_detector import (
-    PerformanceDriftDetector,
-    PerformanceDriftMonitor,
-)
+from performance_drift_detector import PerformanceDriftDetector, PerformanceDriftMonitor
+
+
+def _make_predictions(n: int, r2_target: float = 0.95, seed: int = 42) -> tuple:
+    """Generate (y_pred, y_true) where y_pred achieves approximately r2_target."""
+    rng    = np.random.default_rng(seed)
+    y_true = rng.uniform(50, 300, n)
+    var_y  = np.var(y_true)
+    noise_std = np.sqrt(max(var_y * (1 - r2_target), 1e-6))
+    y_pred    = y_true + rng.normal(0, noise_std, n)
+    return y_pred, y_true
 
 
 @pytest.fixture
 def baseline_metrics():
-    """Create baseline metrics from real model."""
-    iris = load_iris(as_frame=True)
-    X, y = iris.data, iris.target
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
-    )
-    clf = RandomForestClassifier(n_estimators=100, random_state=42)
-    clf.fit(X_train, y_train)
-    y_pred = clf.predict(X_test)
-
-    return PerformanceDriftDetector.calculate_metrics(y_test, y_pred)
+    y_pred, y_true = _make_predictions(200, r2_target=0.93)
+    return PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
 
 
-@pytest.fixture
-def mlflow_available():
-    """Check if MLFlow is available."""
-    try:
-        import mlflow
-
-        mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001"))
-        mlflow.get_experiment_by_name("test-perf-drift")
-        return True
-    except Exception as e:
-        log.warning(f"MLFlow not available: {e}")
-        return False
-
+# ── Realistic Drift Scenarios ──────────────────────────────────────────────────
 
 class TestRealWorldDriftScenarios:
-    """Realistic drift scenarios."""
 
     def test_gradual_performance_degradation(self, baseline_metrics):
-        """
-        Simulate gradual model degradation over time.
-        This is realistic when training data shifts gradually.
-        """
         monitor = PerformanceDriftMonitor(
-            baseline_metrics,
-            window_size=50,
-            num_windows=3,
+            baseline_metrics, window_size=50, num_windows=3,
             effect_size_threshold=0.05,
         )
-
-        iris = load_iris(as_frame=True)
-        X, y = iris.data, iris.target
-
-        # Generate degrading predictions
-        np.random.seed(42)
+        # Feed 5 windows with gradually worsening predictions
         for window in range(5):
-            # Gradually add noise to simulate degradation
-            noise_level = window * 0.1  # 0%, 10%, 20%, 30%, 40%
+            r2_target = 0.93 - window * 0.07  # 0.93 → 0.65
+            y_pred, y_true = _make_predictions(50, r2_target=max(r2_target, 0.1),
+                                               seed=window)
+            monitor.add_batch(y_pred, y_true)
 
-            # Sample from Iris
-            indices = np.random.choice(len(X), size=50, replace=True)
-            X_sample = X.iloc[indices].values
-            y_sample = y.iloc[indices].values
-
-            # Train degraded model
-            X_train, X_test, y_train, y_test = train_test_split(
-                X_sample, y_sample, test_size=0.3, random_state=42
-            )
-
-            clf = RandomForestClassifier(n_estimators=50 + int(noise_level * 10), random_state=42)
-            clf.fit(X_train, y_train)
-            y_pred = clf.predict(X_test)
-
-            # Add random flips to degrade
-            flip_count = int(len(y_pred) * noise_level * 0.2)
-            if flip_count > 0:
-                flip_indices = np.random.choice(len(y_pred), size=flip_count, replace=False)
-                y_pred[flip_indices] = (y_pred[flip_indices] + 1) % 3
-
-            monitor.add_batch(y_pred, y_test)
-
-        # Check drift after accumulation
         drift, results = monitor.check_drift()
-
-        # With gradual degradation, should detect drift
         assert len(results) > 0
-        log.info(f"Gradual degradation test: drift={drift}, metrics={results[0]['metrics']}")
+        log.info(f"Gradual degradation: drift={drift}, "
+                 f"metrics={results[0].get('metrics', {})}")
 
     def test_sudden_distribution_shift(self, baseline_metrics):
-        """
-        Simulate sudden shift in input distribution.
-        Predictions may be accurate but on wrong distribution.
-        """
-        iris = load_iris(as_frame=True)
-        X, y = iris.data, iris.target
+        detector = PerformanceDriftDetector(baseline_metrics, effect_size_threshold=0.05)
 
-        # Train on full Iris
-        clf = RandomForestClassifier(n_estimators=100, random_state=42)
-        clf.fit(X, y)
+        # Sudden shift: predictions are on a completely different scale
+        rng    = np.random.default_rng(99)
+        y_true = rng.uniform(50, 300, 50)
+        y_pred = y_true * 0.5 + rng.normal(0, 40, 50)  # systematic bias
 
-        # Get baseline
-        y_pred_baseline = clf.predict(X)
-        baseline = PerformanceDriftDetector.calculate_metrics(y, y_pred_baseline)
+        shifted = PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
+        drift, details = detector.detect_drift(shifted)
 
-        detector = PerformanceDriftDetector(baseline, effect_size_threshold=0.05)
-
-        # Now test on shifted distribution (only virginica and versicolor)
-        # This simulates real-world shift where model sees different classes
-        shifted_mask = y != 0  # Remove setosa
-        X_shifted = X[shifted_mask]
-        y_shifted = y[shifted_mask]
-
-        y_pred_shifted = clf.predict(X_shifted)
-
-        current_metrics = PerformanceDriftDetector.calculate_metrics(y_shifted, y_pred_shifted)
-
-        drift, details = detector.detect_drift(current_metrics)
-
-        log.info(f"Distribution shift test: drift={drift}, details={details}")
-
-    def test_class_imbalance_drift(self, baseline_metrics):
-        """
-        Test drift in scenarios where class distribution shifts dramatically.
-        This affects recall and precision differently per class.
-        """
-        iris = load_iris(as_frame=True)
-        X, y = iris.data, iris.target
-
-        # Train normally
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.3, stratify=y, random_state=42
-        )
-        clf = RandomForestClassifier(n_estimators=100, random_state=42)
-        clf.fit(X_train, y_train)
-
-        # Get baseline on balanced test set
-        y_pred = clf.predict(X_test)
-        baseline = PerformanceDriftDetector.calculate_metrics(y_test, y_pred)
-
-        detector = PerformanceDriftDetector(baseline, effect_size_threshold=0.05)
-
-        # Now create highly imbalanced predictions
-        # 80% class 0, 15% class 1, 5% class 2
-        y_pred_imbalanced = np.random.choice(
-            [0, 1, 2],
-            size=len(y_test),
-            p=[0.80, 0.15, 0.05],
-        )
-        y_true_imbalanced = y_test  # Keep true distribution
-
-        current_metrics = PerformanceDriftDetector.calculate_metrics(
-            y_true_imbalanced, y_pred_imbalanced
-        )
-
-        drift, details = detector.detect_drift(current_metrics)
-
-        log.info(f"Class imbalance test: drift={drift}, metrics={current_metrics}")
-        assert current_metrics["accuracy"] < baseline["accuracy"]
+        log.info(f"Sudden shift: drift={drift}, metrics={shifted}")
+        assert shifted["r2"] < baseline_metrics["r2"]
 
     def test_drift_recovery(self, baseline_metrics):
-        """
-        Test that detector recovers when performance improves after drift.
-        """
-        iris = load_iris(as_frame=True)
-        X, y = iris.data, iris.target
-
         detector = PerformanceDriftDetector(
             baseline_metrics, effect_size_threshold=0.05, ewma_alpha=0.3
         )
 
-        # Phase 1: Degradation
+        # Phase 1: degradation
         for _ in range(3):
-            current_metrics = {
-                "accuracy": 0.70,
-                "precision": 0.70,
-                "recall": 0.70,
-                "f1": 0.70,
-            }
-            drift, details = detector.detect_drift(current_metrics)
-
+            drift, _ = detector.detect_drift(
+                {"r2": 0.65, "rmse": 35.0, "mae": 25.0}
+            )
         assert drift is True, "Should detect drift during degradation"
 
-        # Phase 2: Recovery
+        # Phase 2: recovery
         for _ in range(5):
-            current_metrics = {
-                "accuracy": 0.95,
-                "precision": 0.95,
-                "recall": 0.95,
-                "f1": 0.95,
-            }
-            drift, details = detector.detect_drift(current_metrics)
+            detector.detect_drift({"r2": 0.93, "rmse": 10.5, "mae": 7.8})
 
-        # After recovery, EWMA should improve
-        ewma_accuracy = detector.ewma_values["accuracy"]
-        assert ewma_accuracy > 0.85, f"EWMA should recover, got {ewma_accuracy}"
+        ewma_r2 = detector.ewma_values["r2"]
+        assert ewma_r2 > 0.80, f"EWMA should recover, got {ewma_r2}"
+        log.info(f"Recovery test: EWMA R² = {ewma_r2}")
 
-        log.info(f"Drift recovery test: EWMA accuracy = {ewma_accuracy}")
+    def test_high_variance_predictions(self, baseline_metrics):
+        detector = PerformanceDriftDetector(baseline_metrics)
+        rng = np.random.default_rng(7)
 
+        for _ in range(5):
+            y_true = rng.uniform(50, 300, 30)
+            y_pred = y_true + rng.normal(0, 60, 30)   # high noise
+            metrics = PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
+            detector.detect_drift(metrics)
+
+        assert len(detector.get_history("r2")) == 5
+
+
+# ── MLflow Integration (skipped without MLFLOW_TRACKING_URI) ──────────────────
 
 class TestMLFlowIntegration:
-    """Tests with MLFlow logging (requires MLFlow running)."""
 
     @pytest.mark.skipif(
         not os.environ.get("MLFLOW_TRACKING_URI"),
         reason="MLFLOW_TRACKING_URI not set",
     )
-    def test_log_drift_detection_to_mlflow(self, baseline_metrics):
-        """Log performance drift detection results to MLFlow."""
+    def test_log_drift_to_mlflow(self, baseline_metrics):
         try:
             import mlflow
         except ImportError:
             pytest.skip("mlflow not installed")
 
-        mlflow_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
-        mlflow.set_tracking_uri(mlflow_uri)
-        mlflow.set_experiment("test-perf-drift")
+        mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
+        mlflow.set_experiment("test-perf-drift-hri")
 
         detector = PerformanceDriftDetector(baseline_metrics)
 
-        # Simulate several drift checks
-        with mlflow.start_run(run_name="perf-drift-test"):
+        with mlflow.start_run(run_name="perf-drift-integration-test"):
             for i in range(5):
-                if i < 2:
-                    metrics = baseline_metrics.copy()  # Normal
-                else:
-                    metrics = {k: v * 0.85 for k, v in baseline_metrics.items()}  # Degraded
-
-                drift, details = detector.detect_drift(metrics)
-
+                r2_target = 0.93 if i < 2 else 0.70
+                y_pred, y_true = _make_predictions(50, r2_target=r2_target, seed=i)
+                metrics = PerformanceDriftDetector.calculate_metrics(y_true, y_pred)
+                drift, _ = detector.detect_drift(metrics)
                 mlflow.log_metrics(
-                    {
-                        f"run_{i}_accuracy": metrics["accuracy"],
-                        f"run_{i}_f1": metrics["f1"],
-                        f"run_{i}_drift": int(drift),
-                    },
+                    {f"step_{i}_r2": metrics["r2"],
+                     f"step_{i}_drift": int(drift)},
                     step=i,
                 )
+            mlflow.set_tag("test_type", "regression_drift_integration")
 
-            mlflow.set_tag("test_type", "performance_drift_integration")
-
-        log.info("Successfully logged to MLFlow")
+        log.info("Successfully logged regression drift to MLflow")
 
     @pytest.mark.skipif(
         not os.environ.get("MLFLOW_TRACKING_URI"),
         reason="MLFLOW_TRACKING_URI not set",
     )
     def test_mlflow_experiment_creation(self):
-        """Test that MLFlow experiment can be created."""
         try:
             import mlflow
         except ImportError:
             pytest.skip("mlflow not installed")
 
-        mlflow_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
-        mlflow.set_tracking_uri(mlflow_uri)
+        mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
+        exp_name = "test-perf-drift-hri-exp"
+        if not mlflow.get_experiment_by_name(exp_name):
+            mlflow.create_experiment(exp_name)
+        assert mlflow.get_experiment_by_name(exp_name) is not None
 
-        # Try to create/get experiment
-        exp = mlflow.get_experiment_by_name("test-perf-drift-exp")
-        if not exp:
-            mlflow.create_experiment("test-perf-drift-exp")
 
-        exp = mlflow.get_experiment_by_name("test-perf-drift-exp")
-        assert exp is not None
-
+# ── Monitor with Realistic Data ────────────────────────────────────────────────
 
 class TestMonitorWithRealData:
-    """Monitor tests with realistic data patterns."""
 
     def test_monitor_detects_systematic_error(self, baseline_metrics):
-        """Test monitor detects systematic prediction errors."""
         monitor = PerformanceDriftMonitor(
-            baseline_metrics,
-            window_size=30,
-            num_windows=2,
+            baseline_metrics, window_size=30, num_windows=2,
             effect_size_threshold=0.05,
         )
+        # Predictions with large systematic offset
+        rng    = np.random.default_rng(5)
+        y_true = rng.uniform(50, 300, 30)
+        y_pred = y_true * 0.6 + 30  # ~40% bias
 
-        iris = load_iris(as_frame=True)
-        X, y = iris.data, iris.target
-
-        # Create systematically wrong predictions
-        # Off-by-one errors for setosa and versicolor
-        y_pred_wrong = y.copy()
-        mask_0 = (y == 0)
-        mask_1 = (y == 1)
-        y_pred_wrong[mask_0] = 1
-        y_pred_wrong[mask_1] = 0
-
-        # Add samples to buffer
         for _ in range(30):
-            monitor.add_batch(y_pred_wrong.values[:5], y.values[:5])
+            monitor.add_batch(y_pred[:1], y_true[:1])
 
         drift, results = monitor.check_drift()
-
-        log.info(f"Systematic error test: drift={drift}, results={results}")
+        log.info(f"Systematic error: drift={drift}, results={results}")
 
     def test_monitor_window_management(self, baseline_metrics):
-        """Test monitor properly manages sliding windows."""
         monitor = PerformanceDriftMonitor(
-            baseline_metrics,
-            window_size=20,
-            num_windows=2,
+            baseline_metrics, window_size=20, num_windows=2,
         )
-
-        iris = load_iris(as_frame=True)
-        X, y = iris.data, iris.target
-
-        clf = RandomForestClassifier(n_estimators=100, random_state=42)
-        clf.fit(X, y)
-
-        y_pred = clf.predict(X)
-
-        # Add data in multiple batches
         for _ in range(3):
-            monitor.add_batch(y_pred[:20], y[:20])
+            y_pred, y_true = _make_predictions(20, r2_target=0.92)
+            monitor.add_batch(y_pred, y_true)
 
             if len(monitor.predictions_buffer) >= 20:
-                drift, results = monitor.check_drift()
-                assert len(results) > 0, "Should return results when buffer >= window_size"
-
-                # Reset for next batch
+                _, results = monitor.check_drift()
+                assert len(results) > 0
                 monitor.reset_buffer()
 
 
+# ── Threshold Sensitivity ──────────────────────────────────────────────────────
+
 class TestThresholdSensitivity:
-    """Test detector sensitivity to parameter thresholds."""
 
-    def test_high_threshold_low_false_positives(self, baseline_metrics):
-        """High thresholds should reduce false positives."""
-        detector_strict = PerformanceDriftDetector(
-            baseline_metrics,
-            effect_size_threshold=0.15,  # High threshold
-            p_value_threshold=0.01,  # Strict p-value
+    def test_strict_threshold_low_false_positives(self, baseline_metrics):
+        det = PerformanceDriftDetector(
+            baseline_metrics, effect_size_threshold=0.15, p_value_threshold=0.01
         )
+        current = {"r2": 0.90, "rmse": 11.5, "mae": 8.5}  # small changes
+        drift, _ = det.detect_drift(current)
+        assert drift is False
 
-        # Small metric changes
-        current_metrics = {
-            "accuracy": 0.94,
-            "precision": 0.94,
-            "recall": 0.94,
-            "f1": 0.94,
-        }
-
-        drift, _ = detector_strict.detect_drift(current_metrics)
-        assert drift is False, "Strict thresholds should not flag small changes"
-
-    def test_low_threshold_high_sensitivity(self, baseline_metrics):
-        """Low thresholds should detect smaller changes."""
-        detector_sensitive = PerformanceDriftDetector(
-            baseline_metrics,
-            effect_size_threshold=0.01,  # Low threshold
-            p_value_threshold=0.10,  # Lenient p-value
+    def test_sensitive_threshold_detects_small_changes(self, baseline_metrics):
+        det = PerformanceDriftDetector(
+            baseline_metrics, effect_size_threshold=0.01, p_value_threshold=0.10
         )
-
-        # Modest metric changes
-        current_metrics = {
-            "accuracy": 0.92,
-            "precision": 0.92,
-            "recall": 0.92,
-            "f1": 0.92,
-        }
-
-        drift, details = detector_sensitive.detect_drift(current_metrics)
-
-        log.info(f"Sensitive detector: drift={drift}, drifted_metrics={details['drifted_metrics']}")
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-s"])
+        current = {"r2": 0.88, "rmse": 14.0, "mae": 10.0}
+        drift, details = det.detect_drift(current)
+        log.info(f"Sensitive: drift={drift}, drifted={details['drifted_metrics']}")
