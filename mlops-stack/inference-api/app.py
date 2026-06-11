@@ -24,6 +24,9 @@ log = logging.getLogger(__name__)
 TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
 MODEL_NAME   = os.environ.get("MODEL_NAME",  "iris-classifier")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE", "Production")
+# SECURITY FIX P0-2: CORS debe restringirse a dominios confiables
+# Valores por defecto: solo localhost (desarrollo), cambiar en producción
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000,http://localhost:8080").split(",")
 
 TARGET_NAMES  = ["setosa", "versicolor", "virginica"]
 FEATURE_NAMES = [
@@ -74,7 +77,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# SECURITY FIX P0-2: CORS restricción a dominios confiables
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["GET", "POST"],           # Solo métodos necesarios
+    allow_headers=["Content-Type", "Accept"],
+    max_age=3600,                             # Cache de preflight por 1 hora
+    allow_credentials=True,
+)
 
 
 class PredictRequest(BaseModel):
