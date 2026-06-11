@@ -23,7 +23,12 @@ check_port $MLFLOW_PORT
 check_port $API_PORT
 
 # ── build ──────────────────────────────────────────────────
+# Use a named builder to avoid Docker's default builder lease-corruption bug.
+# Creates it on first run; subsequent runs reuse it.
 echo "▶ Building images…"
+docker buildx inspect mlops-builder > /dev/null 2>&1 \
+  || docker buildx create --name mlops-builder --driver docker-container
+export BUILDX_BUILDER=mlops-builder
 docker compose build --parallel
 
 # ── levantar MLFlow ────────────────────────────────────────
