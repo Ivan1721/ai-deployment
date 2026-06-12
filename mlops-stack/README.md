@@ -1,6 +1,6 @@
-# MLOps Stack con MLFlow + Docker
+# MLOps Stack — HRI Agricultural Harvesting
 
-Stack de despliegue en producción para modelos ML, containerizado con Docker Compose.
+Stack de despliegue en producción para modelos de regresión ML, containerizado con Docker Compose y respaldado por MLflow.
 
 ## Arquitectura
 
@@ -11,7 +11,7 @@ Stack de despliegue en producción para modelos ML, containerizado con Docker Co
 │  ┌────────────┐    ┌──────────────┐    ┌────────────────┐  │
 │  │   Nginx    │───▶│  MLFlow      │    │ Model Trainer  │  │
 │  │ :80        │    │  Tracking    │◀───│ (one-shot job) │  │
-│  │            │    │  Server :5000│    └────────────────┘  │
+│  │            │    │  Server :5001│    └────────────────┘  │
 │  │            │    │              │             │           │
 │  │            │    │  - UI        │    registers model      │
 │  │            │    │  - REST API  │             │           │
@@ -27,14 +27,23 @@ Stack de despliegue en producción para modelos ML, containerizado con Docker Co
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Dataset
+
+**HRI Agricultural Harvesting Dataset** (Vasconez & Auat Cheein, 2022, *Biosystems Engineering* Vol. 223)
+
+- 284 filas, 15 columnas
+- 2 escenarios: `HumanOnly` (0), `WithRobot` (1)
+- 4 targets de regresión: `TotalRecollected`, `CargoZoneProd`, `TotalWorkload`, `AvgProduction`
+- 8 modelos en producción (2 escenarios × 4 targets)
+
 ## Servicios
 
-| Servicio        | Puerto | Descripción                                    |
-|----------------|--------|------------------------------------------------|
-| `mlflow`       | 5000   | MLFlow Tracking Server + Model Registry        |
-| `inference-api`| 8000   | FastAPI que sirve el modelo en producción       |
-| `nginx`        | 80     | Reverse proxy (unifica acceso)                 |
-| `model-trainer`| —      | Job de entrenamiento (se ejecuta una vez)       |
+| Servicio         | Puerto | Descripción                                    |
+|-----------------|--------|------------------------------------------------|
+| `mlflow`        | 5001   | MLFlow Tracking Server + Model Registry        |
+| `inference-api` | 8000   | FastAPI que sirve los 8 modelos en producción  |
+| `nginx`         | 80     | Reverse proxy (unifica acceso)                 |
+| `model-trainer` | —      | Job de entrenamiento (se ejecuta una vez)      |
 
 ## Requisitos
 
@@ -57,102 +66,129 @@ docker compose up -d inference-api nginx
 
 ## URLs
 
-| Recurso        | URL                          |
-|---------------|------------------------------|
-| MLFlow UI     | http://localhost:5000        |
-| API docs      | http://localhost:8000/docs   |
-| Predict       | http://localhost:8000/predict|
-| Health check  | http://localhost:8000/health |
+| Recurso        | URL                           |
+|---------------|-------------------------------|
+| MLFlow UI     | http://localhost:5001         |
+| API docs      | http://localhost:8000/docs    |
+| Predict       | http://localhost:8000/predict |
+| Health check  | http://localhost:8000/health  |
 
 ## Hacer una predicción
 
 ```bash
+# Escenario 0 = HumanOnly | 6 trabajadores | fila 2 | actividad mixta
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
-  -d '{
-    "instances": [
-      [5.1, 3.5, 1.4, 0.2],
-      [6.7, 3.0, 5.2, 2.3],
-      [4.9, 3.1, 1.5, 0.1]
-    ]
-  }'
+  -d '{"scenario":0,"workers":6,"crop_row":2,"rand_pos":0,"activity":"harv_mixed"}'
 ```
 
 **Respuesta esperada:**
 ```json
 {
-  "predictions": [
-    {"class_id": 0, "class_name": "setosa",     "probability": 1.0},
-    {"class_id": 2, "class_name": "virginica",  "probability": 0.96},
-    {"class_id": 0, "class_name": "setosa",     "probability": 1.0}
-  ],
-  "model_name":    "iris-classifier",
-  "model_version": "1",
-  "model_stage":   "Production"
+  "scenario": 0,
+  "predictions": {
+    "TotalRecollected": 48.7,
+    "CargoZoneProd":    31.2,
+    "TotalWorkload":     0.0,
+    "AvgProduction":     8.1
+  },
+  "model_versions": {
+    "TotalRecollected": "3",
+    "CargoZoneProd":    "2",
+    "TotalWorkload":    "2",
+    "AvgProduction":    "2"
+  },
+  "model_stage": "Production"
 }
 ```
 
-## Features incluidas
+## Features
 
-- **MLFlow Tracking**: métricas, parámetros, artefactos por experiment run
-- **Model Registry**: versionado, stages (Staging → Production → Archived)
-- **Auto-promotion**: el trainer promueve automáticamente a Production
-- **Hot-reload**: `POST /reload` recarga el modelo sin reiniciar el contenedor
-- **Health checks**: Docker espera a que cada servicio esté sano antes de continuar
-- **Volúmenes persistentes**: la DB y artefactos de MLFlow sobreviven reinicios
-- **Data Drift Detection**: Detecta cambios en distribuciones de features (KS test) y predicciones (Chi2)
-- **Performance Drift Detection**: Monitorea caídas en Accuracy, Precision, Recall, F1 usando t-tests y EWMA
-- **Quality Gates**: Valida métricas antes de promoción a Production
-- **Automated Testing**: Suite QA con tests de data, model, API y performance drift
+| Feature         | Descripción                                      |
+|----------------|--------------------------------------------------|
+| `Humans`        | Número de trabajadores humanos                  |
+| `ROW_N`         | Número de fila del cultivo                      |
+| `RandomPosition`| Posición aleatoria (0/1)                        |
+| `Act_Ladder`    | Actividad: escalera (one-hot)                   |
+| `Act_Mixed`     | Actividad: mixta (one-hot)                      |
+| `Act_Picker`    | Actividad: recolector (one-hot)                 |
 
-## Monitoreo de Drifts
+> `harv_ground` es la categoría de referencia (todas las Act_* en 0).
 
-### Data Drift
-Detecta cambios en la distribución de features usando Kolmogorov-Smirnov test y distribución de predicciones con Chi-square test.
+## Métricas de evaluación
 
-### Performance Drift  
-Monitorea métricas de clasificación:
-- **Accuracy**: Exactitud general
-- **Precision**: Precisión weighted, macro, micro
-- **Recall**: Recall weighted, macro, micro  
-- **F1-score**: F1 weighted, macro, micro
+Cada modelo es evaluado con 6 métricas:
 
-**Métodos estadísticos:**
-- **t-test**: Compara media de ventana actual vs baseline (requiere >= 5 samples)
-- **EWMA**: Exponential Moving Average detecta tendencias sostenidas
-- **Effect Size**: Cambio absoluto > umbral (default 5%)
+| Métrica      | Gate        | Descripción                                       |
+|-------------|-------------|---------------------------------------------------|
+| R²          | ≥ 0.70      | Varianza explicada                                |
+| RMSE        | —           | Error cuadrático medio                            |
+| MAE         | —           | Error absoluto medio                              |
+| sMAPE       | < 20%       | Error porcentual simétrico (robusto a ceros)      |
+| Max Error   | —           | Peor error individual                             |
+| Feature Ranking | —       | Importancia relativa por permutación              |
 
-**Configuración (variables de entorno):**
-```bash
-ENABLE_PERFORMANCE_DRIFT=true           # Habilitar detección
-PERF_DRIFT_EFFECT_SIZE=0.05             # Cambio mínimo (5%)
-PERF_DRIFT_P_VALUE=0.05                 # Significancia estadística
-PERF_DRIFT_CONSECUTIVE=2                # Ventanas consecutivas con drift
+## Torneo multi-modelo
+
+12 algoritmos compiten por escenario × target:
+
+```
+LinearRegression · Ridge · Lasso · ElasticNet · SVR
+ExtraTrees · RandomForest · GradientBoosting · MLP
+XGBoost · LightGBM · CatBoost
 ```
 
-**Triggers:**
-- Se logean métricas en MLFlow bajo experimento `performance-drift-monitoring`
-- Si >= 2 métricas muestran drift en N ventanas consecutivas → trigger retraining automático
-- Detención correcta de falsas alarmas con umbrales ajustables
+El ganador (mejor R² en cross-validation) se registra en MLflow y se promueve a `Production`.
+
+## Monitoreo
+
+### Data Drift
+Detecta cambios en la distribución de features usando Kolmogorov-Smirnov test.
+
+### Performance Drift
+Monitorea degradación en métricas de regresión:
+- **R²**: Varianza explicada
+- **RMSE**: Error cuadrático medio
+- **MAE**: Error absoluto medio
+- **sMAPE**: Error porcentual simétrico
+- **Max Error**: Peor predicción individual
+
+**Métodos estadísticos:**
+- **Effect Size**: Cambio absoluto > umbral (default 5%)
+- **T-test**: Media de últimas 5 ventanas vs baseline
+- **EWMA**: Tendencia sostenida via moving average (α=0.3)
+
+## Suite de tests
+
+```bash
+docker compose run --rm test-runner
+```
+
+| Nivel | Archivo                            | Qué valida                        |
+|------|------------------------------------|-----------------------------------|
+| 1    | `test_data.py`                     | Schema del dataset HRI            |
+| 2    | `test_model.py`                    | R² ≥ 0.70, sMAPE < 20% por modelo |
+| 3    | `test_api.py`                      | HTTP 200, latencia < 500ms        |
+| 4    | `test_performance_drift.py`        | Lógica del detector               |
 
 ## Actualizar el modelo
 
-Para entrenar una nueva versión y promoverla:
-
 ```bash
-# Re-entrenar (crea una nueva versión en el Registry)
+# Re-entrenar (crea nuevas versiones en el Registry)
 docker compose run --rm model-trainer
 
-# El endpoint /reload actualiza el modelo en producción sin downtime
+# Recargar modelo en la API sin reiniciar el contenedor
 curl -X POST http://localhost:8000/reload
 ```
 
 ## Detener el stack
 
 ```bash
-docker compose down          # detiene contenedores
-docker compose down -v       # detiene + elimina volúmenes (borra datos)
+docker compose down          # detiene contenedores (mantiene datos)
+docker compose down -v       # detiene + elimina volúmenes (borra modelos)
 ```
+
+> Usar `-v` cuando se modifica `train.py` para forzar re-entrenamiento limpio.
 
 ## Estructura del proyecto
 
@@ -160,33 +196,32 @@ docker compose down -v       # detiene + elimina volúmenes (borra datos)
 mlops-stack/
 ├── docker-compose.yml
 ├── start.sh
-├── README.md
-├── mlflow/
-│   └── Dockerfile
+├── data/
+│   └── simulation_all.csv          ← HRI dataset
 ├── model-trainer/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   └── train.py                           ← entrenamiento + registro en MLFlow
+│   └── train.py                    ← torneo 12 modelos + registro MLflow
 ├── inference-api/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   └── app.py                             ← FastAPI + carga desde Model Registry
+│   └── app.py                      ← FastAPI + 8 modelos de producción
 ├── drift-detector/
 │   ├── Dockerfile
-│   ├── detector.py                        ← Data drift + Performance drift detection
-│   ├── performance_drift_detector.py      ← PerformanceDriftDetector class
-│   ├── retrain_trigger.py                 ← Trigger retraining on drift
+│   ├── detector.py                 ← data drift (KS test)
+│   ├── performance_drift_detector.py
+│   ├── retrain_trigger.py
 │   └── requirements.txt
 ├── nginx/
 │   ├── Dockerfile
 │   └── nginx.conf
 └── tests/
     ├── Dockerfile
-    ├── run_tests.py                       ← Orquestador de pruebas (4 niveles)
-    ├── test_data.py                       ← Level 1: Data validation tests
-    ├── test_model.py                      ← Level 2: Model quality gates
-    ├── test_api.py                        ← Level 3: API tests
-    ├── test_performance_drift.py          ← Level 4: Performance drift tests
-    ├── test_performance_drift_integration.py ← Integration tests
+    ├── run_tests.py                ← orquestador QA (4 niveles)
+    ├── test_data.py
+    ├── test_model.py
+    ├── test_api.py
+    ├── test_performance_drift.py
+    ├── test_performance_drift_integration.py
     └── entrypoint.sh
 ```

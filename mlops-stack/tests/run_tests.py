@@ -13,11 +13,11 @@ log = logging.getLogger(__name__)
 
 MLFLOW_URI  = os.environ.get("MLFLOW_TRACKING_URI", "http://host.docker.internal:5001")
 API_URL     = os.environ.get("INFERENCE_API_URL",   "http://host.docker.internal:8000")
-MODEL_NAME  = os.environ.get("MODEL_NAME",  "iris-classifier")
+MODEL_NAME  = os.environ.get("MODEL_NAME",  "hri-HumanOnly-TotalRecollected")
 MODEL_STAGE = os.environ.get("MODEL_STAGE", "Production")
 
-GATE_MIN_ACCURACY   = float(os.environ.get("GATE_MIN_ACCURACY",   "0.90"))
-GATE_MIN_F1         = float(os.environ.get("GATE_MIN_F1",         "0.90"))
+GATE_MIN_R2         = float(os.environ.get("GATE_MIN_R2",         "0.70"))
+GATE_MAX_SMAPE      = float(os.environ.get("GATE_MAX_SMAPE",      "20.0"))
 GATE_MAX_LATENCY_MS = float(os.environ.get("GATE_MAX_LATENCY_MS", "500"))
 
 
@@ -91,9 +91,9 @@ def log_mlflow(results: dict, gates_ok: bool):
                 mlflow.log_metric(f"{level}_ok",      int(r["ok"]))
             mlflow.log_metric("gates_passed", int(gates_ok))
             mlflow.log_params({
-                "gate_accuracy": GATE_MIN_ACCURACY,
-                "gate_f1":       GATE_MIN_F1,
-                "gate_latency":  GATE_MAX_LATENCY_MS,
+                "gate_r2":      GATE_MIN_R2,
+                "gate_smape":   GATE_MAX_SMAPE,
+                "gate_latency": GATE_MAX_LATENCY_MS,
             })
             mlflow.set_tag("event_type", "quality_assurance")
         log.info("Results logged to MLFlow ✓")
@@ -146,11 +146,11 @@ def main():
     log.info("")
     log.info("━━━ LEVEL 2: MODEL TESTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     r = run_pytest("test_model.py", extra_env={
-        "MLFLOW_URI":   MLFLOW_URI,
-        "MODEL_NAME":   MODEL_NAME,
-        "MODEL_STAGE":  MODEL_STAGE,
-        "MIN_ACCURACY": str(GATE_MIN_ACCURACY),
-        "MIN_F1":       str(GATE_MIN_F1),
+        "MLFLOW_URI":       MLFLOW_URI,
+        "MODEL_NAME":       MODEL_NAME,
+        "MODEL_STAGE":      MODEL_STAGE,
+        "GATE_MIN_R2":      str(GATE_MIN_R2),
+        "GATE_MAX_SMAPE":   str(GATE_MAX_SMAPE),
     })
     results["model"] = r
     if not r["ok"]:
