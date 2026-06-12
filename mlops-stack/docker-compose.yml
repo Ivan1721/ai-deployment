@@ -108,6 +108,7 @@ services:
       MODEL_STAGE:         Production
       DATASET_PATH:        /data/simulation_all.csv
       GATE_MIN_R2:         "0.70"
+      GATE_MAX_SMAPE:      "20.0"
       GATE_MAX_LATENCY_MS: "500"
     volumes:
       - mlflow-data:/mlflow

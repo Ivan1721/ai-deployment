@@ -127,7 +127,7 @@ All workflows use `runs-on: self-hosted` — the runner shares the Docker socket
 - `cd.yml`: triggers on push to `main`. Syncs files to `/opt/mlops-stack`, rebuilds, checks if `hri-HumanOnly-TotalRecollected` exists in Production before deciding to retrain.
 - `retrain.yml`: scheduled Mondays 03:00 UTC, or manual dispatch.
 
-**Note**: `retrain.yml` still passes `GATE_MIN_ACCURACY`/`GATE_MIN_F1` env vars — these are Iris leftovers and do not affect test results (test_model.py reads `GATE_MIN_R2` and `GATE_MAX_SMAPE`).
+**Note**: `mlops-stack/.github/workflows/retrain.yml` and `.github/workflows/retrain.yml` both pass `GATE_MIN_R2`/`GATE_MAX_SMAPE`; the former is used when the stack is deployed at `/opt/mlops-stack`.
 
 ### BuildKit
 

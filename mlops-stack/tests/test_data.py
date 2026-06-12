@@ -156,3 +156,58 @@ class TestDataIntegrity:
         for scenario_id in [0, 1]:
             n = (df["Scenario"] == scenario_id).sum()
             assert n >= 20, f"Scenario {scenario_id} has only {n} rows (need >= 20)"
+
+
+class TestDistribution:
+    """Statistical quality checks — detects degenerate features before training."""
+
+    NUMERIC_FEATURES = ["Humans", "ROW_N", "RandomPosition"]
+
+    def test_feature_variance_not_zero(self, df):
+        """A constant feature carries no information and will inflate permutation importance ranks."""
+        for col in self.NUMERIC_FEATURES:
+            assert df[col].var() > 0, f"Feature '{col}' has zero variance — it is constant"
+
+    def test_no_perfect_multicollinearity(self, df):
+        """Perfectly correlated features (|r|=1) are redundant and can destabilize some solvers."""
+        corr = df[self.NUMERIC_FEATURES].corr().abs()
+        np.fill_diagonal(corr.values, 0)
+        max_corr = corr.max().max()
+        assert max_corr < 0.999, (
+            f"Perfect multicollinearity detected: max |r| = {max_corr:.4f}"
+        )
+
+    def test_scenario_balance(self, df):
+        """Neither scenario should represent less than 25% of the dataset."""
+        total = len(df)
+        for scenario_id in [0, 1]:
+            pct = (df["Scenario"] == scenario_id).sum() / total
+            assert pct >= 0.25, (
+                f"Scenario {scenario_id} represents only {pct:.1%} of data "
+                f"— severe imbalance may bias per-scenario models"
+            )
+
+    def test_all_activities_represented(self, df):
+        """Each activity must appear in both scenarios to ensure reliable one-hot encoding."""
+        required = {"harv_ground", "harv_ladder", "harv_mixed", "harv_picker"}
+        for scenario_id in [0, 1]:
+            present = set(df[df["Scenario"] == scenario_id]["MainActivity"].unique())
+            missing = required - present
+            assert not missing, (
+                f"Scenario {scenario_id} missing activities: {missing} "
+                f"— one-hot columns would be all-zero for these rows"
+            )
+
+    def test_train_test_split_preserves_scenario_ratio(self, df):
+        """A stratified split must maintain scenario proportions within 3% tolerance."""
+        from sklearn.model_selection import train_test_split
+        X = np.zeros(len(df))
+        y = df["Scenario"].values
+        _, _, y_tr, y_te = train_test_split(X, y, test_size=0.20, stratify=y, random_state=42)
+        for scenario_id in [0, 1]:
+            train_pct = (y_tr == scenario_id).mean()
+            test_pct  = (y_te == scenario_id).mean()
+            assert abs(train_pct - test_pct) < 0.03, (
+                f"Scenario {scenario_id}: train={train_pct:.3f} vs test={test_pct:.3f} "
+                f"— stratification is not representative"
+            )
