@@ -43,14 +43,38 @@ This MLOps stack trains, serves, and monitors **8 regression models** (2 scenari
 ## Services (docker-compose.yml)
 
 ```
-mlflow-server      → http://localhost:5000   Experiment tracking + model registry
+mlflow-server      → http://localhost:5001   Experiment tracking + model registry
 inference-api      → http://localhost:8000   FastAPI: /predict /health /info /reload
 drift-detector     → (background)            Detects drift; triggers retraining
 model-trainer      → (one-shot job)          Trains & registers models on startup
 test-runner        → (one-shot job)          Runs pytest test suite
+nginx              → http://localhost:80     Reverse proxy: /mlflow/ and /api/
 ```
 
 All services mount `./data:/data:ro` so they share the same CSV.
+
+### Nginx proxy paths
+
+| URL | Proxies to |
+|---|---|
+| `http://localhost/mlflow/` | MLflow UI (port 5001) |
+| `http://localhost/api/` | Inference API (port 8000) |
+
+### MLflow experiments
+
+| Experiment | Populated by |
+|---|---|
+| `hri-harvesting` | `model-trainer` — one run per candidate (phase=comparison) + winner (phase=winner) |
+| `drift-monitoring` | `drift-detector` — one run per cycle: KS stats, data_drift, concept_drift |
+| `performance-drift-monitoring` | `drift-detector` — one run per cycle: R², RMSE, MAE drift metrics |
+| `retraining-events` | `retrain_trigger.py` — logged when challenger is evaluated/promoted |
+| `quality-assurance` | `test-runner` — one run per QA execution: data_ok, model_ok, api_ok, gates_passed |
+
+### Volume persistence
+
+After `docker compose down` (without `-v`), the `mlflow-data` volume is preserved. On the next `docker compose up`, the registered models are still in the registry — **no need to run model-trainer again** unless you want to retrain.
+
+Use `docker compose down -v` only when you need to wipe the registry (e.g., after changing `train.py` metrics or model structure).
 
 ---
 
@@ -459,7 +483,7 @@ curl -s -X POST http://localhost:8000/predict \
 
 ```bash
 # Open browser:
-open http://localhost:5000
+open http://localhost:5001
 
 # Or via CLI:
 docker compose exec mlflow-server mlflow models list
@@ -478,6 +502,60 @@ docker compose logs -f model-trainer
 ```bash
 curl -s -X POST http://localhost:8000/reload | python3 -m json.tool
 ```
+
+---
+
+## Troubleshooting
+
+### MLflow unhealthy / won't start
+
+```bash
+docker compose logs mlflow
+# "unable to open database file" → volume permissions corrupted
+docker compose down -v
+docker compose up -d mlflow
+```
+
+### inference-api reports `"status": "degraded"` (models_loaded < 8)
+
+The model isn't in Production in the registry. Train first:
+```bash
+docker compose run --rm model-trainer
+# Then reload without restarting the container:
+curl -X POST http://localhost:8000/reload
+```
+
+### test-runner can't reach inference-api
+
+The test-runner container uses `http://host.docker.internal:8000` by default. If that fails, find the Docker bridge gateway IP and override:
+```bash
+docker network inspect mlops-stack_mlops-net | grep Gateway
+# e.g. "Gateway": "172.18.0.1"
+
+docker compose run --rm \
+  -e MLFLOW_TRACKING_URI=http://172.18.0.1:5001 \
+  -e INFERENCE_API_URL=http://172.18.0.1:8000 \
+  test-runner
+```
+
+### drift-detector not generating MLflow runs
+
+```bash
+docker compose logs drift-detector
+# Look for "IMPORT ERROR" (missing package) or "MLflow logging failed"
+docker compose restart drift-detector
+```
+
+### Port 5001 or 8000 already in use
+
+```bash
+lsof -i TCP:5001
+lsof -i TCP:8000
+# If occupied, change the host port in docker-compose.yml:
+# ports: "5002:5001"   (host:container)
+```
+
+> Note: macOS reserves port 5000 for AirPlay — that is why this stack uses 5001.
 
 ---
 
