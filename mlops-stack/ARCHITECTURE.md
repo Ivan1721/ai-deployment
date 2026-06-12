@@ -4,6 +4,33 @@
 
 This MLOps stack trains, serves, and monitors **8 regression models** (2 scenarios × 4 targets) on the **HRI Agricultural Harvesting Dataset**. The system runs entirely in Docker Compose and integrates MLflow for experiment tracking, a FastAPI inference server, and an automated drift-detection + retraining loop.
 
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Docker Network                       │
+│                                                             │
+│  ┌────────────┐    ┌──────────────┐    ┌────────────────┐  │
+│  │   Nginx    │───▶│  MLFlow      │    │ Model Trainer  │  │
+│  │ :80        │    │  Tracking    │◀───│ (one-shot job) │  │
+│  │            │    │  Server :5001│    └────────────────┘  │
+│  │            │    │              │             │           │
+│  │            │    │  - UI        │    registers model      │
+│  │            │    │  - Registry  │◀────────────┘           │
+│  │            │    └──────────────┘                         │
+│  │            │                                             │
+│  │            │    ┌──────────────┐    ┌────────────────┐  │
+│  │            │───▶│  Inference   │    │ Drift Detector │  │
+│  │            │    │  API  :8000  │◀───│ (background)   │  │
+│  │            │    │  (FastAPI)   │    └────────────────┘  │
+│  └────────────┘    └──────────────┘                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Requirements
+
+- Docker ≥ 24
+- Docker Compose ≥ v2
+- 4 GB RAM free
+
 ---
 
 ## Dataset
