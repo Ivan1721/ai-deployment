@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Arquitectura genérica con patrón Strategy — MLOps Stack</title>
+<style>
+  body {
+    font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: #222;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  h1 { border-bottom: 3px solid #2c3e50; padding-bottom: 8px; }
+  h2 { border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 40px; }
+  h3 { margin-top: 28px; color: #2c3e50; }
+  code {
+    background: #f4f4f4;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 0.92em;
+  }
+  pre {
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 12px 16px;
+    overflow-x: auto;
+    font-size: 0.88em;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #2c3e50; color: #fff; }
+  tr:nth-child(even) { background: #f9f9f9; }
+  .note {
+    background: #fff8e1;
+    border-left: 4px solid #f0ad4e;
+    padding: 10px 16px;
+    margin: 16px 0;
+  }
+  .ok {
+    background: #e8f5e9;
+    border-left: 4px solid #4caf50;
+    padding: 10px 16px;
+    margin: 16px 0;
+  }
+  .file { color: #6a1b9a; font-family: Consolas, Monaco, monospace; }
+</style>
+</head>
+<body>
+
+<h1>Arquitectura genérica con patrón Strategy — MLOps Stack</h1>
+
+<h2>1. Contexto y motivación</h2>
+
+<p>
+El stack original de MLOps estaba fuertemente acoplado a un único caso de uso:
+clasificación del dataset <em>Iris</em> con <code>RandomForestClassifier</code>.
+La carga del dataset (<code>load_iris()</code>), los nombres de features/clases,
+los hiperparámetros del modelo y la forma de la respuesta de <code>/predict</code>
+estaban hardcodeados y duplicados en cinco servicios distintos
+(<code>model-trainer</code>, <code>inference-api</code>, <code>drift-detector</code>,
+<code>retrain_trigger</code> y los cuatro módulos de <code>tests/</code>).
+</p>
+
+<p>
+El objetivo del refactor fue introducir una capa de abstracción basada en los
+patrones <strong>Strategy</strong> y <strong>Registry</strong> para que el stack
+soporte, sin más cambios de código:
+</p>
+
+<ul>
+  <li>Distintas <strong>fuentes de datos</strong> (datasets de sklearn, CSV propios, etc.).</li>
+  <li>Distintas <strong>familias de modelo</strong> (Random Forest, Logistic/Linear Regression, etc.).</li>
+  <li>Distintos <strong>tipos de problema</strong> (clasificación, regresión).</li>
+</ul>
+
+<p>
+El caso Iris/RandomForest se convirtió en el primer <strong>"ejemplo"</strong> dentro
+de esta arquitectura genérica — sin cambiar su comportamiento observable (mismas
+métricas, mismos endpoints, mismos quality gates).
+</p>
+
+<h2>2. Estructura del paquete <code>mlops_common</code></h2>
+
+<p>
+Se creó un paquete compartido <code>mlops-stack/mlops_common/</code>, importado por
+los cuatro servicios Python vía un build context común de Docker:
+</p>
+
+<pre><code>mlops-stack/
+  mlops_common/
+    config.py                # ExperimentConfig (dataclasses) <- YAML
+    data_sources/
+      base.py                 # DataSource (ABC) + DatasetBundle
+      sklearn_dataset.py       # SklearnDatasetSource
+      csv_source.py            # CsvDataSource
+    models/
+      base.py                  # ModelStrategy (ABC)
+      classification.py         # RandomForest / LogisticRegression
+      regression.py             # RandomForest / LinearRegression
+    problem_types/
+      base.py                  # ProblemType (ABC)
+      classification.py         # ClassificationProblem
+      regression.py             # RegressionProblem
+  configs/
+    iris-classifier.yaml      # "ejemplo" Iris (equivalente al setup original)
+</code></pre>
+
+<p>
+Un único archivo YAML (apuntado por la variable de entorno <code>MODEL_CONFIG</code>)
+conecta una fuente de datos, una familia de modelo y un tipo de problema —
+y ese mismo archivo es usado por <code>model-trainer</code>, <code>inference-api</code>,
+<code>drift-detector</code> y <code>tests/</code>.
+</p>
+
+<h2>3. Las tres abstracciones (Strategy + Registry)</h2>
+
+<h3>3.1 Fuente de datos — <code>DataSource</code> / <code>DatasetBundle</code></h3>
+
+<p>
+Cada fuente de datos concreta sabe cómo obtener <code>X</code>, <code>y</code> y los
+nombres de features/target, y los expone con una forma uniforme:
+</p>
+
+<pre><code>class DatasetBundle:
+    X: pd.DataFrame
+    y: pd.Series
+    feature_names: List[str]
+    target_names: Optional[List[str]] = None  # clasificación
+    target_name:  Optional[str]       = None  # regresión
+
+class DataSource(ABC):
+    def load(self) -> DatasetBundle: ...
+
+DATA_SOURCE_REGISTRY = {
+    "sklearn_dataset": SklearnDatasetSource,  # load_iris, load_wine, ...
+    "csv":             CsvDataSource,          # CSV propio + target_column
+}
+</code></pre>
+
+<p>
+<span class="file">SklearnDatasetSource(name="iris")</span> reemplaza los ocho
+<code>load_iris()</code> directos que existían antes. <span class="file">CsvDataSource</span>
+lee cualquier CSV bien estructurado: todas las columnas excepto
+<code>target_column</code> son features, y decide automáticamente si el target es
+de clasificación o regresión según su tipo y cardinalidad.
+</p>
+
+<h3>3.2 Familia de modelo — <code>ModelStrategy</code></h3>
+
+<pre><code>class ModelStrategy(ABC):
+    def build(self, params: dict): ...        # estimador sklearn sin entrenar
+    def fit(self, model, X, y): ...
+    def predict(self, model, X): ...
+    def predict_proba(self, model, X): ...     # solo clasificación
+    def cv_score(self, model, X, y, cv, scoring): ...
+
+MODEL_REGISTRY = {
+    "random_forest_classifier": RandomForestClassifierStrategy,
+    "logistic_regression":      LogisticRegressionStrategy,
+    "random_forest_regressor":  RandomForestRegressorStrategy,
+    "linear_regression":        LinearRegressionStrategy,
+}
+</code></pre>
+
+<h3>3.3 Tipo de problema — <code>ProblemType</code></h3>
+
+<pre><code>class ProblemType(ABC):
+    name: str
+    primary_metric: str   # "mayor es mejor" siempre
+
+    def compute_metrics(self, y_true, y_pred, y_proba=None) -> dict: ...
+    def quality_gate(self, metrics, gates_cfg) -> (bool, list[str]): ...
+    def build_predictions(self, y_pred, y_proba, bundle) -> list[dict]: ...
+    def concept_drift(self, reference, current, p_value_thr) -> (bool, dict): ...
+
+PROBLEM_TYPE_REGISTRY = {
+    "classification": ClassificationProblem(),  # accuracy/precision/recall/f1, chi2
+    "regression":     RegressionProblem(),       # mae/rmse/r2, KS sobre predicciones
+}
+</code></pre>
+
+<table>
+  <tr><th></th><th>ClassificationProblem</th><th>RegressionProblem</th></tr>
+  <tr>
+    <td><strong>primary_metric</strong></td>
+    <td><code>accuracy</code></td>
+    <td><code>r2</code></td>
+  </tr>
+  <tr>
+    <td><strong>compute_metrics</strong></td>
+    <td><code>accuracy, precision, recall, f1</code></td>
+    <td><code>mae, rmse, r2</code></td>
+  </tr>
+  <tr>
+    <td><strong>build_predictions</strong></td>
+    <td><code>[{class_id, class_name, probability}]</code></td>
+    <td><code>[{value}]</code></td>
+  </tr>
+  <tr>
+    <td><strong>concept_drift</strong></td>
+    <td>Chi² sobre distribución de clases predichas</td>
+    <td>KS test sobre valores predichos</td>
+  </tr>
+</table>
+
+<p class="note">
+Elegir <code>primary_metric</code> "mayor-es-mejor" en ambos casos evita lógica
+de dirección (¿subió o bajó es mejor?) en <code>retrain_trigger.py</code>: la
+decisión de promoción es siempre
+<code>challenger_metric &gt;= champion_metric + MIN_DELTA</code>.
+</p>
+
+<h3>3.4 Configuración — <code>ExperimentConfig</code> (YAML)</h3>
+
+<p>
+El archivo <span class="file">configs/iris-classifier.yaml</span> describe el
+caso de uso completo y reemplaza los hiperparámetros/umbrales que antes estaban
+duplicados en <code>train.py</code> y <code>retrain_trigger.py</code>:
+</p>
+
+<pre><code>name: iris-classifier
+problem_type: classification
+
+data_source:
+  type: sklearn_dataset
+  name: iris
+
+model:
+  family: random_forest_classifier
+  params:
+    n_estimators: 200
+    max_depth: 8
+    min_samples_split: 4
+    min_samples_leaf: 2
+    class_weight: balanced
+    random_state: 42
+
+training:
+  test_size: 0.25
+  stratify: true
+  cv_folds: 5
+
+mlflow:
+  experiment_name: iris-production
+  registered_model_name: iris-classifier
+
+quality_gates:
+  min_accuracy: 0.90
+  min_f1: 0.90
+  min_per_class_recall: 0.80
+  max_cv_std: 0.05
+
+drift:
+  data_drift_method: ks
+  data_drift_p_value: 0.05
+  concept_drift_p_value: 0.05
+  performance:
+    enabled: true
+    consecutive_windows: 2
+
+retrain:
+  challenger_min_improvement: 0.0
+</code></pre>
+
+<p>
+La ruta del config se inyecta vía la variable de entorno
+<code>MODEL_CONFIG</code> (default <code>/app/configs/iris-classifier.yaml</code>),
+configurada por servicio en <code>docker-compose.yml</code>.
+</p>
+
+<h2>4. El caso Iris como "ejemplo" dentro de la arquitectura</h2>
+
+<p>
+Con estas tres abstracciones, cada servicio queda así:
+</p>
+
+<pre><code>cfg      = load_config()                         # MODEL_CONFIG -> ExperimentConfig
+bundle   = get_data_source(cfg.data_source).load()   # DatasetBundle
+strategy = get_model_strategy(cfg.model.family)       # ModelStrategy
+problem  = get_problem_type(cfg.problem_type)          # ProblemType
+</code></pre>
+
+<p>
+<code>model-trainer/train.py</code> además registra <strong>tags de esquema</strong>
+en el run de MLFlow (<code>problem_type</code>, <code>model_family</code>,
+<code>feature_names</code>, <code>target_names</code>/<code>target_name</code>,
+<code>config_name</code>). Esto permite que <code>inference-api</code> y
+<code>drift-detector</code> sean <strong>agnósticos del dataset</strong>: leen el
+esquema desde el run de MLFlow en lugar de tenerlo hardcodeado, con fallback a
+<code>MODEL_CONFIG</code> para modelos legacy.
+</p>
+
+<h2>5. Flujo Drift → Retrain → Promote (ya genérico)</h2>
+
+<pre><code>drift-detector (KS sobre features, concept drift vía problem.concept_drift,
+                performance drift vía problem.compute_metrics)
+  → tras N ventanas consecutivas con drift:
+     retrain_trigger.trigger()
+       → bundle  = get_data_source(cfg.data_source).load()
+       → strategy = get_model_strategy(cfg.model.family)
+       → problem  = get_problem_type(cfg.problem_type)
+       → entrena challenger, mide problem.compute_metrics()
+       → promueve si challenger[primary_metric] &gt;= champion[primary_metric] + MIN_DELTA
+       → POST inference-api:8000/reload
+</code></pre>
+
+<div class="ok">
+<strong>Verificación end-to-end realizada</strong> sobre la rama
+<code>refactor-generalization</code>:
+<ul>
+  <li><code>model-trainer</code> produjo las <strong>mismas métricas</strong> que antes
+      del refactor (accuracy=0.9211, f1=0.9209, cv_mean=0.9533) más los nuevos tags
+      de esquema en MLFlow.</li>
+  <li><code>inference-api</code>: <code>/health</code>, <code>/info</code>,
+      <code>/predict</code> devolvieron el contrato esperado.</li>
+  <li><code>test-runner</code>: 71/71 tests pasaron (data, model, api,
+      performance-drift) → <em>PROMOTION ALLOWED</em>.</li>
+  <li><code>drift-detector</code>: ciclo completo de detección de drift,
+      entrenamiento de challenger, promoción y <code>/reload</code> ejecutado
+      exitosamente (v11 → v12, accuracy 0.9211 → 0.9474).</li>
+</ul>
+</div>
+
+<h2>6. Cómo agregar un segundo ejemplo: regresión sobre un CSV ad-hoc</h2>
+
+<p>
+Gracias a <code>CsvDataSource</code> y <code>RegressionProblem</code>, agregar un
+caso de regresión sobre un CSV propio <strong>no requiere cambios de código</strong>,
+solo un nuevo archivo de configuración y los datos:
+</p>
+
+<h3>6.1 Ubicar el CSV</h3>
+<p>
+Como es un dataset ad-hoc (no versionado dentro de la imagen), se monta como
+volumen de solo lectura:
+</p>
+<pre><code># docker-compose.yml
+volumes:
+  - ./data:/app/data:ro</code></pre>
+
+<h3>6.2 Crear <code>configs/mi-regresor.yaml</code></h3>
+<pre><code>name: mi-regresor
+problem_type: regression
+
+data_source:
+  type: csv
+  path: /app/data/mi_dataset.csv
+  target_column: precio        # columna numérica continua
+
+model:
+  family: random_forest_regressor   # o linear_regression
+  params:
+    n_estimators: 200
+    max_depth: 8
+    random_state: 42
+
+training:
+  test_size: 0.25
+  stratify: false               # no aplica a target continuo
+  cv_folds: 5
+
+mlflow:
+  experiment_name: mi-regresor-production
+  registered_model_name: mi-regresor
+
+quality_gates:
+  min_r2: 0.70
+  max_rmse: 5.0
+
+drift:
+  data_drift_method: ks
+  data_drift_p_value: 0.05
+  concept_drift_p_value: 0.05   # KS sobre predicciones (RegressionProblem)
+  performance:
+    enabled: true
+    consecutive_windows: 2
+</code></pre>
+
+<h3>6.3 Apuntar <code>MODEL_CONFIG</code> al nuevo config</h3>
+<p>
+Reutilizando las mismas imágenes Docker, basta con otro set de servicios (o
+cambiar las variables de entorno del set existente):
+</p>
+<pre><code>environment:
+  MODEL_CONFIG: /app/configs/mi-regresor.yaml
+  MODEL_NAME:   mi-regresor</code></pre>
+
+<h3>6.4 Qué cambia automáticamente</h3>
+<table>
+  <tr><th>Componente</th><th>Comportamiento con <code>problem_type: regression</code></th></tr>
+  <tr>
+    <td><code>train.py</code></td>
+    <td>Split sin <code>stratify</code>; métricas <code>mae/rmse/r2</code>;
+        CV con <code>scoring="r2"</code>; tag <code>target_name=precio</code>.</td>
+  </tr>
+  <tr>
+    <td><code>/predict</code></td>
+    <td>Responde <code>[{"value": ...}]</code> en lugar de
+        <code>{class_id, class_name, probability}</code>.</td>
+  </tr>
+  <tr>
+    <td><code>/info</code></td>
+    <td><code>"target": "precio"</code>, <code>"classes": null</code>.</td>
+  </tr>
+  <tr>
+    <td><code>drift-detector</code></td>
+    <td>Concept drift vía KS sobre predicciones; performance drift sobre
+        <code>{mae, rmse, r2}</code>.</td>
+  </tr>
+  <tr>
+    <td><code>retrain_trigger</code></td>
+    <td>Promueve si <code>challenger.r2 &gt;= champion.r2 + MIN_DELTA</code> —
+        mismo código, solo cambia <code>primary_metric</code>.</td>
+  </tr>
+</table>
+
+<div class="note">
+<strong>Excepción — <code>tests/</code>:</strong> <code>test_data.py</code> y
+<code>test_model.py</code> tienen aserciones específicas del ejemplo Iris
+(rangos biológicos de pétalos/sépalos, 3 clases, recall por clase, etc.). Para
+un segundo ejemplo de regresión se necesitaría un módulo de tests paralelo con
+sus propias aserciones de dominio y umbrales (<code>min_r2</code>/<code>max_rmse</code>
+en vez de accuracy/f1), apuntando a su propio <code>MODEL_CONFIG</code>.
+</div>
+
+<h2>7. Algoritmos "ad-hoc" no disponibles en sklearn</h2>
+
+<p>
+Las secciones anteriores reutilizan familias ya registradas en
+<code>MODEL_REGISTRY</code> (Random Forest, Logistic/Linear Regression). El
+patrón <strong>Strategy</strong> permite incorporar <strong>cualquier algoritmo</strong>
+— de una librería externa o 100% escrito a mano — siempre que se exprese como
+una nueva subclase de <code>ModelStrategy</code> registrada bajo una nueva
+clave. El resto del stack (<code>train.py</code>, <code>inference-api</code>,
+<code>drift-detector</code>, <code>retrain_trigger</code>) no cambia: solo
+consume <code>get_model_strategy(cfg.model.family)</code>.
+</p>
+
+<p>
+Se ilustran dos casos: <strong>(A)</strong> un regresor de una librería externa
+no usada hoy en el stack (XGBoost), y <strong>(B)</strong> un clasificador
+escrito completamente desde cero (sin ninguna librería de ML).
+</p>
+
+<h3>7.A — Regresor de una librería externa: <code>XGBRegressor</code></h3>
+
+<p>
+<code>xgboost</code> no está instalado en las imágenes actuales, pero
+<code>XGBRegressor</code> ya implementa la API de sklearn
+(<code>fit</code>/<code>predict</code>/<code>get_params</code>/<code>set_params</code>),
+por lo que la estrategia es casi un envoltorio directo:
+</p>
+
+<pre><code># mlops_common/models/regression.py
+from xgboost import XGBRegressor
+
+class XGBoostRegressorStrategy(ModelStrategy):
+    def build(self, params):
+        return XGBRegressor(**params)
+    # fit / predict / cv_score: se heredan de ModelStrategy sin cambios,
+    # porque XGBRegressor ya es compatible con cross_val_score.
+    # predict_proba: no aplica a regresión (NotImplementedError por defecto, correcto)
+</code></pre>
+
+<p>Registrar la nueva familia:</p>
+
+<pre><code># mlops_common/models/__init__.py
+MODEL_REGISTRY = {
+    ...,
+    "xgboost_regressor": XGBoostRegressorStrategy,
+}
+</code></pre>
+
+<p>Agregar la dependencia en los Dockerfiles que entrenan/evalúan el modelo
+(<code>model-trainer</code>, <code>drift-detector</code>, <code>tests</code>):</p>
+
+<pre><code># Dockerfile — capa de dependencias científicas
+RUN pip install --no-cache-dir --timeout=120 --retries=5 \
+    numpy==1.26.4 pandas==2.2.2 scipy==1.13.0 scikit-learn==1.4.2 \
+    pyyaml==6.0.1 xgboost==2.0.3</code></pre>
+
+<p>Y referenciarla desde el YAML del experimento:</p>
+
+<pre><code># configs/mi-regresor.yaml
+model:
+  family: xgboost_regressor
+  params:
+    n_estimators: 300
+    max_depth: 4
+    learning_rate: 0.05
+    random_state: 42
+</code></pre>
+
+<h3>7.B — Clasificador 100% custom (sin librerías de ML)</h3>
+
+<p>
+Para un algoritmo que no existe en ninguna librería, se implementa una clase
+que siga la <strong>API de estimador de sklearn</strong>
+(<code>fit</code>/<code>predict</code>/<code>predict_proba</code>) heredando de
+<code>BaseEstimator</code> + <code>ClassifierMixin</code>. Esa herencia es lo que
+le da <code>get_params</code>/<code>set_params</code> "gratis", necesarios para
+que <code>cross_val_score</code> (usado por <code>ModelStrategy.cv_score</code>)
+y <code>mlflow.sklearn.log_model</code> funcionen sin más cambios.
+</p>
+
+<p>
+Ejemplo: un <em>"clasificador de centroide ponderado"</em> — calcula el centroide
+de cada clase en <code>fit</code>, y en <code>predict_proba</code> convierte las
+distancias a los centroides en probabilidades vía softmax. No existe como tal
+en sklearn (que solo ofrece <code>NearestCentroid</code> sin probabilidades).
+</p>
+
+<pre><code># mlops_common/models/custom_centroid.py
+import numpy as np
+from sklearn.base import BaseEstimator, ClassifierMixin
+
+class WeightedCentroidClassifier(BaseEstimator, ClassifierMixin):
+    """Predice por centroide mas cercano; probabilidad = softmax(-distancia)."""
+
+    def __init__(self, temperature: float = 1.0):
+        self.temperature = temperature
+
+    def fit(self, X, y):
+        X = np.asarray(X)
+        self.classes_ = np.unique(y)
+        self.centroids_ = np.array(
+            [X[np.asarray(y) == c].mean(axis=0) for c in self.classes_]
+        )
+        return self
+
+    def predict(self, X):
+        return self.classes_[self._distances(X).argmin(axis=1)]
+
+    def predict_proba(self, X):
+        logits = -self._distances(X) / self.temperature
+        exp = np.exp(logits - logits.max(axis=1, keepdims=True))
+        return exp / exp.sum(axis=1, keepdims=True)
+
+    def _distances(self, X):
+        X = np.asarray(X)
+        return np.linalg.norm(
+            X[:, None, :] - self.centroids_[None, :, :], axis=2
+        )
+</code></pre>
+
+<p>La estrategia y el registro siguen el mismo patrón que los demás:</p>
+
+<pre><code># mlops_common/models/classification.py
+from .custom_centroid import WeightedCentroidClassifier
+
+class WeightedCentroidStrategy(ModelStrategy):
+    def build(self, params):
+        return WeightedCentroidClassifier(**params)
+
+    def predict_proba(self, model, X):
+        return model.predict_proba(X)
+
+    @property
+    def supports_proba(self) -> bool:
+        return True
+
+# mlops_common/models/__init__.py
+MODEL_REGISTRY = {
+    ...,
+    "weighted_centroid": WeightedCentroidStrategy,
+}
+</code></pre>
+
+<pre><code># configs/iris-centroide.yaml (mismo dataset Iris, algoritmo distinto)
+problem_type: classification
+model:
+  family: weighted_centroid
+  params:
+    temperature: 1.0
+</code></pre>
+
+<table>
+  <tr><th>Aspecto</th><th>Caso A (XGBoost)</th><th>Caso B (custom desde cero)</th></tr>
+  <tr>
+    <td>Nuevas dependencias</td>
+    <td><code>xgboost==2.0.3</code> en Dockerfiles relevantes</td>
+    <td>Ninguna (solo numpy + sklearn, ya presentes)</td>
+  </tr>
+  <tr>
+    <td>Compatibilidad sklearn</td>
+    <td>Nativa (XGBRegressor ya la implementa)</td>
+    <td>Se obtiene heredando <code>BaseEstimator</code>/<code>ClassifierMixin</code></td>
+  </tr>
+  <tr>
+    <td><code>cv_score</code> / MLflow logging</td>
+    <td>Funciona sin overrides</td>
+    <td>Funciona sin overrides (gracias a la herencia anterior)</td>
+  </tr>
+  <tr>
+    <td>Cambios fuera de <code>mlops_common</code></td>
+    <td>Ninguno — <code>train.py</code>, <code>app.py</code>, <code>detector.py</code>
+        siguen igual</td>
+    <td>Ninguno</td>
+  </tr>
+</table>
+
+<div class="note">
+<strong>Si el algoritmo no sigue la API de sklearn en absoluto</strong> (p. ej.
+un modelo en PyTorch con su propio ciclo de entrenamiento), la solución es la
+misma a nivel de arquitectura pero la subclase de <code>ModelStrategy</code>
+debe <em>sobrescribir</em> <code>fit</code>, <code>predict</code> y
+<code>cv_score</code> (en vez de heredar los defaults) para adaptar esas
+llamadas al ciclo de entrenamiento propio del framework — el resto del stack
+sigue sin cambios porque solo interactúa con <code>ModelStrategy</code>, nunca
+con la librería subyacente directamente.
+</div>
+
+</body>
+</html>
