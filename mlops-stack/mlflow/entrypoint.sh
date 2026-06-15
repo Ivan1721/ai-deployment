@@ -4,7 +4,9 @@ set -e
 # Crear directorios necesarios dentro del volumen montado
 # Esto corre DESPUÉS de que Docker monta el volumen, así que los permisos persisten
 mkdir -p /mlflow/artifacts
-chmod -R 777 /mlflow
+chmod 700 /mlflow/mlflow.db 2>/dev/null || true
+chmod 755 /mlflow/artifacts
+chown -R mlflow:mlflow /mlflow 2>/dev/null || true
 
 echo "MLFlow data dir ready: $(ls -la /mlflow)"
 

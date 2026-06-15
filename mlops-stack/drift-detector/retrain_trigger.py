@@ -11,7 +11,6 @@ Cuando el detector detecta drift, este módulo:
 
 import os, time, logging, traceback
 import numpy as np
-import pandas as pd
 import mlflow
 import mlflow.sklearn
 from mlflow import MlflowClient
@@ -22,20 +21,13 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
+from mlops_common import load_config
+from mlops_common.data_sources import get_data_source
+
 log = logging.getLogger(__name__)
 
-DATASET_PATH  = os.environ.get("DATASET_PATH",      "/data/simulation_all.csv")
-INFERENCE_URL = os.environ.get("INFERENCE_API_URL",  "http://inference-api:8000")
+INFERENCE_URL = os.environ.get("INFERENCE_API_URL", "http://inference-api:8000")
 MIN_DELTA     = float(os.environ.get("CHALLENGER_MIN_IMPROVEMENT", "0.0"))
-
-SCENARIOS = {0: "HumanOnly", 1: "WithRobot"}
-TARGETS   = {
-    "TotalRecollected": "TotalRecollectedCrops_crop_units",
-    "CargoZoneProd":    "TotalProductionCargoZone_crop_units",
-    "TotalWorkload":    "TotalHumanWorkload_kcal",
-    "AvgProduction":    "AverageHumanProduction_crop_units",
-}
-FEATURE_NAMES = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
 
 CHALLENGER_PARAMS = {
     "n_estimators": 200, "max_depth": 4,
@@ -44,20 +36,6 @@ CHALLENGER_PARAMS = {
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
-
-def _load_preprocessed() -> pd.DataFrame:
-    df = pd.read_csv(DATASET_PATH)
-    dummies = pd.get_dummies(df["MainActivity"], prefix="Act", drop_first=True)
-    dummies = dummies.rename(columns={
-        "Act_harv_ladder": "Act_Ladder",
-        "Act_harv_mixed":  "Act_Mixed",
-        "Act_harv_picker": "Act_Picker",
-    })
-    for col in ["Act_Ladder", "Act_Mixed", "Act_Picker"]:
-        if col not in dummies.columns:
-            dummies[col] = 0
-    return pd.concat([df, dummies[["Act_Ladder", "Act_Mixed", "Act_Picker"]]], axis=1)
-
 
 def _champion_r2(client: MlflowClient, model_name: str) -> float | None:
     try:
@@ -99,22 +77,25 @@ def _reload_api():
         log.warning(f"Could not reload API: {e}")
 
 
-def _train_challengers(mlflow_uri: str) -> bool:
+def _train_challengers(mlflow_uri: str, cfg) -> bool:
     """Trains a GradientBoosting challenger for every scenario × target slot."""
+    ms = cfg.multi_slot
     mlflow.set_tracking_uri(mlflow_uri)
-    mlflow.set_experiment("hri-harvesting")
+    mlflow.set_experiment(cfg.mlflow.experiment_name)
 
-    df = _load_preprocessed()
+    bundle = get_data_source(cfg.data_source).load()
+    df     = bundle.extra["df"]
 
-    for scenario_id, scenario_label in SCENARIOS.items():
+    for scenario_id, scenario_label in ms.scenarios.items():
         df_sc = df[df["Scenario"] == scenario_id].copy()
-        X     = df_sc[FEATURE_NAMES].values
+        X     = df_sc[ms.feature_names].values
 
-        for target_alias, target_col in TARGETS.items():
+        for target_alias, target_col in ms.targets.items():
             y          = df_sc[target_col].values
             model_name = f"hri-{scenario_label}-{target_alias}"
             X_tr, X_te, y_tr, y_te = train_test_split(
-                X, y, test_size=0.20, random_state=int(time.time()) % 9999
+                X, y, test_size=cfg.training.test_size,
+                random_state=int(time.time()) % 9999,
             )
 
             pipe = Pipeline([
@@ -134,7 +115,8 @@ def _train_challengers(mlflow_uri: str) -> bool:
 
             with mlflow.start_run(
                 run_name=f"{scenario_label}-{target_alias}-challenger",
-                tags={"phase": "challenger", "triggered_by": "drift_detector"},
+                tags={"phase": "challenger", "triggered_by": "drift_detector",
+                      "config": cfg.name},
             ):
                 mlflow.log_params({
                     **CHALLENGER_PARAMS,
@@ -156,6 +138,9 @@ def _train_challengers(mlflow_uri: str) -> bool:
 # ── main entry point ──────────────────────────────────────────────────────────
 
 def trigger(reason: str, consecutive_windows: int, mlflow_uri: str):
+    cfg = load_config()
+    ms  = cfg.multi_slot
+
     log.info("━" * 55)
     log.info(f"  RETRAIN TRIGGER  reason={reason}  consec={consecutive_windows}")
     log.info("━" * 55)
@@ -172,7 +157,7 @@ def trigger(reason: str, consecutive_windows: int, mlflow_uri: str):
 
     # 2. Train challengers for all 8 slots
     try:
-        _train_challengers(mlflow_uri)
+        _train_challengers(mlflow_uri, cfg)
     except Exception:
         log.error(f"Challenger training failed:\n{traceback.format_exc()}")
         return
@@ -180,10 +165,10 @@ def trigger(reason: str, consecutive_windows: int, mlflow_uri: str):
     time.sleep(3)  # allow Registry to settle
 
     # 3. Compare and promote per slot
-    for scenario_id, scenario_label in SCENARIOS.items():
-        for target_alias in TARGETS:
-            model_name  = f"hri-{scenario_label}-{target_alias}"
-            champ_r2    = _champion_r2(client, model_name)
+    for scenario_id, scenario_label in ms.scenarios.items():
+        for target_alias in ms.targets:
+            model_name        = f"hri-{scenario_label}-{target_alias}"
+            champ_r2          = _champion_r2(client, model_name)
             chal_ver, chal_r2 = _challenger_r2(client, model_name)
 
             if chal_ver is None:

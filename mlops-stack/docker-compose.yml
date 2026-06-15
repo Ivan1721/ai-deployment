@@ -19,7 +19,7 @@ services:
     container_name: mlflow-server
     restart: unless-stopped
     ports:
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"       # localhost-only: no exponer a la red pública
     volumes:
       - mlflow-data:/mlflow
     healthcheck:
@@ -57,7 +57,7 @@ services:
     container_name: inference-api
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"       # localhost-only: acceso público solo vía nginx
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
       MODEL_STAGE:         Production

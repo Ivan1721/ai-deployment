@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE", "Production")
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000").split(",")
 
 # Load configuration from MODEL_CONFIG YAML
 _cfg = load_config()
@@ -83,7 +84,13 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Accept"],
+    max_age=3600,
+)
 
 
 class PredictRequest(BaseModel):
