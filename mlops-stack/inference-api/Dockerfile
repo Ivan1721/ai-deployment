@@ -6,11 +6,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Dependencias pesadas en capas separadas
 RUN pip install --no-cache-dir --timeout=120 --retries=5 \
     numpy==1.26.4 \
     pandas==2.2.2 \
-    scikit-learn==1.4.2
+    scikit-learn==1.4.2 \
+    pyyaml==6.0.1
 
 # gradient-boosting libraries needed to deserialize trained models
 RUN pip install --no-cache-dir --timeout=120 --retries=5 \
@@ -26,7 +26,9 @@ RUN pip install --no-cache-dir --timeout=120 --retries=5 \
     uvicorn[standard]==0.29.0 \
     pydantic==2.7.1
 
-COPY app.py .
+COPY mlops_common ./mlops_common
+COPY configs ./configs
+COPY inference-api/app.py .
 
 EXPOSE 8000
 

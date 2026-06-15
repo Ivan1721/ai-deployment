@@ -21,6 +21,7 @@ try:
     from mlflow import MlflowClient
     import retrain_trigger
     from performance_drift_detector import PerformanceDriftDetector, PerformanceDriftMonitor
+    from mlops_common import load_config
     print("All imports OK", flush=True)
 except Exception as e:
     print(f"IMPORT ERROR: {e}", flush=True)
@@ -47,9 +48,14 @@ PERF_DRIFT_THR     = float(os.environ.get("PERF_DRIFT_EFFECT_SIZE", "0.05"))
 PERF_DRIFT_P_VALUE = float(os.environ.get("PERF_DRIFT_P_VALUE",     "0.05"))
 PERF_CONSEC_NEED   = int(os.environ.get("PERF_DRIFT_CONSECUTIVE",   "2"))
 
-SCENARIOS     = {0: "HumanOnly", 1: "WithRobot"}
-FEATURE_NAMES = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
-TARGETS = {
+# Load experiment configuration from MODEL_CONFIG YAML
+_cfg = load_config()
+_ms  = _cfg.multi_slot
+
+SCENARIOS     = _ms.scenarios     if _ms else {0: "HumanOnly", 1: "WithRobot"}
+FEATURE_NAMES = _ms.feature_names if _ms else ["Humans", "ROW_N", "RandomPosition",
+                                                "Act_Ladder", "Act_Mixed", "Act_Picker"]
+TARGETS       = _ms.targets       if _ms else {
     "TotalRecollected": "TotalRecollectedCrops_crop_units",
     "CargoZoneProd":    "TotalProductionCargoZone_crop_units",
     "TotalWorkload":    "TotalHumanWorkload_kcal",

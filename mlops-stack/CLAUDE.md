@@ -44,6 +44,23 @@ flake8 model-trainer/train.py inference-api/app.py drift-detector/detector.py \
   --max-line-length=110 --extend-ignore=E501,W503
 ```
 
+## Configuration (mlops_common)
+
+The stack is driven by a YAML config file loaded via `MODEL_CONFIG` env var (default: `/app/configs/hri-harvesting.yaml`).
+
+| Config | Use case |
+|---|---|
+| `configs/hri-harvesting.yaml` | HRI dataset — 2 scenarios × 4 targets, 12-model tournament |
+| `configs/iris-classifier.yaml` | Iris dataset — single RandomForest classifier (reference example) |
+
+`mlops_common/` is a shared Python package copied into every container at build time:
+- `config.py` — `load_config()` returns `ExperimentConfig` + optional `MultiSlotConfig`
+- `data_sources/` — `sklearn_dataset`, `csv`, `hri_csv` (HRI preprocessing)
+- `models/` — 14 model strategies (2 classification + 12 regression)
+- `problem_types/` — `ClassificationProblem` and `RegressionProblem` (metrics, quality gates, drift)
+
+To switch to Iris classification mode, change `MODEL_CONFIG` in docker-compose.yml to `iris-classifier.yaml` and rebuild.
+
 ## Architecture
 
 ### Services (docker-compose.yml)

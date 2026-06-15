@@ -18,21 +18,22 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from mlops_common import load_config
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
 TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE", "Production")
 
-SCENARIOS = {0: "HumanOnly", 1: "WithRobot"}
-TARGETS = {
-    "TotalRecollected": "TotalRecollectedCrops_crop_units",
-    "CargoZoneProd":    "TotalProductionCargoZone_crop_units",
-    "TotalWorkload":    "TotalHumanWorkload_kcal",
-    "AvgProduction":    "AverageHumanProduction_crop_units",
-}
+# Load configuration from MODEL_CONFIG YAML
+_cfg = load_config()
+_ms  = _cfg.multi_slot
+
+SCENARIOS       = _ms.scenarios       if _ms else {0: "HumanOnly", 1: "WithRobot"}
+TARGETS         = _ms.targets         if _ms else {}
+FEATURE_NAMES   = _ms.feature_names   if _ms else []
 ACTIVITY_VALUES = ["harv_ground", "harv_ladder", "harv_mixed", "harv_picker"]
-FEATURE_NAMES   = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
 
 state: Dict = {"models": {}, "loaded_at": None}
 
