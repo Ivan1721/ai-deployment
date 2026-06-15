@@ -18,24 +18,29 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from mlops_common import load_config
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
 TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE", "Production")
-# SECURITY FIX P0-2: CORS debe restringirse a dominios confiables
-# Valores por defecto: solo localhost (desarrollo), cambiar en producción
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000,http://localhost:8080").split(",")
+# <<<<<<< feature/dataset-update
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000").split(",")
 
-SCENARIOS = {0: "HumanOnly", 1: "WithRobot"}
-TARGETS = {
-    "TotalRecollected": "TotalRecollectedCrops_crop_units",
-    "CargoZoneProd":    "TotalProductionCargoZone_crop_units",
-    "TotalWorkload":    "TotalHumanWorkload_kcal",
-    "AvgProduction":    "AverageHumanProduction_crop_units",
-}
+# Load configuration from MODEL_CONFIG YAML
+_cfg = load_config()
+_ms  = _cfg.multi_slot
+# =======
+# # SECURITY FIX P0-2: CORS debe restringirse a dominios confiables
+# # Valores por defecto: solo localhost (desarrollo), cambiar en producción
+# CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000,http://localhost:8080").split(",")
+# >>>>>>> develop
+
+SCENARIOS       = _ms.scenarios       if _ms else {0: "HumanOnly", 1: "WithRobot"}
+TARGETS         = _ms.targets         if _ms else {}
+FEATURE_NAMES   = _ms.feature_names   if _ms else []
 ACTIVITY_VALUES = ["harv_ground", "harv_ladder", "harv_mixed", "harv_picker"]
-FEATURE_NAMES   = ["Humans", "ROW_N", "RandomPosition", "Act_Ladder", "Act_Mixed", "Act_Picker"]
 
 state: Dict = {"models": {}, "loaded_at": None}
 
@@ -85,20 +90,30 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
-# <<<<<<< develop
-
-# SECURITY FIX P0-2: CORS restricción a dominios confiables
+# <<<<<<< feature/dataset-update
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_methods=["GET", "POST"],           # Solo métodos necesarios
+    allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Accept"],
-    max_age=3600,                             # Cache de preflight por 1 hora
-    allow_credentials=True,
+    max_age=3600,
 )
 # =======
-# app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-# >>>>>>> feature/dataset-update
+# <<<<<<< develop
+
+# SECURITY FIX P0-2: CORS restricción a dominios confiables
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=CORS_ORIGINS,
+#     allow_methods=["GET", "POST"],           # Solo métodos necesarios
+#     allow_headers=["Content-Type", "Accept"],
+#     max_age=3600,                             # Cache de preflight por 1 hora
+#     allow_credentials=True,
+# )
+# # =======
+# # app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# # >>>>>>> feature/dataset-update
+# >>>>>>> develop
 
 
 class PredictRequest(BaseModel):

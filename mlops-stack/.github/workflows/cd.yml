@@ -74,7 +74,7 @@ jobs:
           from mlflow import MlflowClient
           c = MlflowClient()
           try:
-              vs = c.get_latest_versions('iris-classifier', stages=['Production'])
+              vs = c.get_latest_versions('hri-HumanOnly-TotalRecollected', stages=['Production'])
               print('exists' if vs else 'missing')
           except Exception:
               print('missing')

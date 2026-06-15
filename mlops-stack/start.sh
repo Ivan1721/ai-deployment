@@ -29,7 +29,7 @@ echo "▶ Building images…"
 docker buildx inspect mlops-builder > /dev/null 2>&1 \
   || docker buildx create --name mlops-builder --driver docker-container
 export BUILDX_BUILDER=mlops-builder
-docker compose build --parallel
+docker compose build
 
 # ── levantar MLFlow ────────────────────────────────────────
 echo "▶ Starting MLFlow Tracking Server (puerto $MLFLOW_PORT)…"
