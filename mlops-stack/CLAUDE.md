@@ -13,7 +13,7 @@ docker compose down -v
 bash start.sh
 
 # Manual step-by-step
-docker compose build --parallel
+docker compose build
 docker compose up -d mlflow
 docker compose run --rm model-trainer
 docker compose up -d inference-api nginx
