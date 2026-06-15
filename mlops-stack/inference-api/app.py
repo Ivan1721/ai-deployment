@@ -25,11 +25,17 @@ log = logging.getLogger(__name__)
 
 TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE", "Production")
+# <<<<<<< feature/dataset-update
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000").split(",")
 
 # Load configuration from MODEL_CONFIG YAML
 _cfg = load_config()
 _ms  = _cfg.multi_slot
+# =======
+# # SECURITY FIX P0-2: CORS debe restringirse a dominios confiables
+# # Valores por defecto: solo localhost (desarrollo), cambiar en producción
+# CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000,http://localhost:8080").split(",")
+# >>>>>>> develop
 
 SCENARIOS       = _ms.scenarios       if _ms else {0: "HumanOnly", 1: "WithRobot"}
 TARGETS         = _ms.targets         if _ms else {}
@@ -84,6 +90,7 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+# <<<<<<< feature/dataset-update
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -91,6 +98,22 @@ app.add_middleware(
     allow_headers=["Content-Type", "Accept"],
     max_age=3600,
 )
+# =======
+# <<<<<<< develop
+
+# SECURITY FIX P0-2: CORS restricción a dominios confiables
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=CORS_ORIGINS,
+#     allow_methods=["GET", "POST"],           # Solo métodos necesarios
+#     allow_headers=["Content-Type", "Accept"],
+#     max_age=3600,                             # Cache de preflight por 1 hora
+#     allow_credentials=True,
+# )
+# # =======
+# # app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# # >>>>>>> feature/dataset-update
+# >>>>>>> develop
 
 
 class PredictRequest(BaseModel):
