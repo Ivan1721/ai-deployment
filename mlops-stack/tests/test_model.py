@@ -4,10 +4,12 @@ test_model.py  ─  Nivel 2: Model Tests + Quality Gates
 import os, pytest
 import numpy as np
 import pandas as pd
-from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
 from sklearn.dummy import DummyClassifier
+
+from mlops_common import load_config
+from mlops_common.data_sources import get_data_source
 
 MLFLOW_URI   = os.environ.get("MLFLOW_URI",   "http://host.docker.internal:5001")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "iris-classifier")
@@ -27,11 +29,23 @@ def model():
 
 
 @pytest.fixture(scope="module")
-def splits():
-    iris = load_iris(as_frame=True)
-    X, y = iris.data, iris.target
-    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, stratify=y, random_state=42)
-    return X_tr, X_te, y_tr, y_te, list(iris.target_names)
+def cfg():
+    return load_config()
+
+
+@pytest.fixture(scope="module")
+def bundle(cfg):
+    return get_data_source(cfg.data_source).load()
+
+
+@pytest.fixture(scope="module")
+def splits(bundle, cfg):
+    X, y = bundle.X, bundle.y
+    split_kwargs = {"test_size": cfg.training.test_size, "random_state": 42}
+    if cfg.training.stratify:
+        split_kwargs["stratify"] = y
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, **split_kwargs)
+    return X_tr, X_te, y_tr, y_te, list(bundle.target_names)
 
 
 @pytest.fixture(scope="module")
@@ -63,9 +77,8 @@ class TestPerformanceGates:
             recall = (y_pred[mask] == i).mean()
             assert recall >= 0.80, f"Low recall for '{name}': {recall:.4f}"
 
-    def test_cv_stability(self, model):
-        iris = load_iris(as_frame=True)
-        scores = cross_val_score(model, iris.data, iris.target, cv=5, scoring="accuracy")
+    def test_cv_stability(self, model, bundle):
+        scores = cross_val_score(model, bundle.X, bundle.y, cv=5, scoring="accuracy")
         assert scores.std() < 0.05, f"CV unstable: std={scores.std():.4f}"
         assert scores.mean() >= 0.90, f"CV mean low: {scores.mean():.4f}"
 
@@ -87,28 +100,25 @@ class TestSanityChecks:
         for i in range(len(names)):
             assert i in predicted, f"Model never predicts class {names[i]}"
 
-    def test_reproducible(self, model):
-        iris = load_iris(as_frame=True)
-        s = iris.data.iloc[:10]
+    def test_reproducible(self, model, bundle):
+        s = bundle.X.iloc[:10]
         assert (model.predict(s) == model.predict(s)).all(), "Model not deterministic"
 
 
 class TestRobustness:
 
-    def test_single_sample(self, model):
+    def test_single_sample(self, model, bundle):
         df = pd.DataFrame([[5.1, 3.5, 1.4, 0.2]],
-                          columns=load_iris().feature_names)
+                          columns=bundle.feature_names)
         p = model.predict(df)
         assert len(p) == 1 and p[0] in [0, 1, 2]
 
-    def test_probabilities_sum_to_one(self, model):
-        iris = load_iris(as_frame=True)
-        probs = model.predict_proba(iris.data.iloc[:20])
+    def test_probabilities_sum_to_one(self, model, bundle):
+        probs = model.predict_proba(bundle.X.iloc[:20])
         assert np.allclose(probs.sum(axis=1), 1.0, atol=1e-6)
 
-    def test_no_negative_probabilities(self, model):
-        iris = load_iris(as_frame=True)
-        assert (model.predict_proba(iris.data) >= 0).all()
+    def test_no_negative_probabilities(self, model, bundle):
+        assert (model.predict_proba(bundle.X) >= 0).all()
 
 
 class TestMLFlowRegistry:

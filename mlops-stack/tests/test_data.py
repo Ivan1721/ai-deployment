@@ -22,15 +22,17 @@ Fundamento:
 import pytest
 import numpy as np
 import pandas as pd
-from sklearn.datasets import load_iris
+
+from mlops_common import load_config
+from mlops_common.data_sources import get_data_source
 
 
 # ── fixture compartido ─────────────────────────────────────────────────────
 @pytest.fixture(scope="module")
 def iris_data():
-    """Carga el dataset que usará el trainer. Fixture compartido por todos los tests."""
-    iris = load_iris(as_frame=True)
-    return iris.data, iris.target, iris.feature_names, iris.target_names
+    """Carga el dataset que usará el trainer (vía MODEL_CONFIG). Fixture compartido por todos los tests."""
+    bundle = get_data_source(load_config().data_source).load()
+    return bundle.X, bundle.y, bundle.feature_names, bundle.target_names
 
 
 # ══════════════════════════════════════════════════════════════════
