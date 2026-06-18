@@ -28,6 +28,8 @@ COPY tests/test_model.py .
 COPY tests/test_api.py .
 COPY tests/test_performance_drift.py .
 COPY tests/performance_drift_detector.py .
+COPY tests/test_model_slices.py .
+COPY tests/test_api_contract.py .
 
 RUN chmod +x /entrypoint.sh
 

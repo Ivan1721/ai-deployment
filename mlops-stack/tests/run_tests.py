@@ -188,6 +188,35 @@ def main():
         log.warning("InferenceAPI not reachable — skipping performance drift tests")
         results["performance_drift"] = {"passed": 0, "failed": 0, "total": 0, "duration": 0, "ok": True}
 
+    # ── Nivel 5: Model Slice Tests ───────────────────────────────────────────
+    log.info("")
+    log.info("━━━ LEVEL 5: MODEL SLICE TESTS ━━━━━━━━━━━━━━━━━━━━━━━")
+    r = run_pytest("test_model_slices.py", extra_env={
+        "MLFLOW_TRACKING_URI": MLFLOW_URI,
+        "MODEL_STAGE":         MODEL_STAGE,
+        "GATE_MIN_R2_SLICE":   "0.50",
+        "GATE_MAX_R2_GAP":     "0.25",
+    })
+    results["model_slices"] = r
+    if not r["ok"]:
+        all_ok = False
+        log.error("Model slice tests FAILED — bias detected in a data sub-group")
+
+    # ── Nivel 6: API Contract Tests ──────────────────────────────────────────
+    log.info("")
+    log.info("━━━ LEVEL 6: API CONTRACT TESTS ━━━━━━━━━━━━━━━━━━━━━━")
+    if api_ok:
+        r = run_pytest("test_api_contract.py", extra_env={
+            "INFERENCE_API_URL": API_URL,
+        })
+        results["api_contract"] = r
+        if not r["ok"]:
+            all_ok = False
+            log.error("API contract tests FAILED — breaking change detected")
+    else:
+        log.warning("InferenceAPI not reachable — skipping API contract tests")
+        results["api_contract"] = {"passed": 0, "failed": 0, "total": 0, "duration": 0, "ok": True}
+
     log_mlflow(results, all_ok)
     print_summary(results, all_ok)
     sys.exit(0 if all_ok else 1)
