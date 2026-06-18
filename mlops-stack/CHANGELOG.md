@@ -2,6 +2,42 @@
 
 ---
 
+## Block 4 — Generic Inference API + Multi-Experiment  |  2026-06-18
+
+### Gap 1 — API genérica `POST /models/{name}/predict`
+
+**Problema:** el endpoint `/predict` estaba hardcodeado para HRI harvesting — features fijas, encoding de actividad HRI, respuesta con 4 campos específicos. No podía servir ningún otro modelo registrado en MLflow.
+
+**Solución:** tres nuevos endpoints genéricos en `inference-api/app.py`:
+
+| Endpoint | Descripción |
+|---|---|
+| `GET /models` | Lista todos los modelos con versión `Production` en el registry |
+| `GET /models/{name}` | Metadata de un modelo específico (version, stage, run_id) |
+| `POST /models/{name}/predict` | Predicción con cualquier modelo sklearn del registry |
+
+**`POST /models/{name}/predict`** acepta `{"features": {"col": value, ...}, "stage": "Production"}` — construye un DataFrame con los features, llama al modelo, devuelve `{"model": name, "stage": stage, "prediction": float}`. El modelo se carga en el primer request y se guarda en `_model_cache` para requests posteriores.
+
+**`POST /reload`** ahora también limpia `_model_cache` (fuerza recarga de modelos genéricos en el siguiente request).
+
+### Gap 2 — Multi-experimento
+
+**Solución:** el API genérico da soporte multi-experimento automáticamente — no hay cambios de código necesarios para añadir nuevos experimentos. Para servir modelos de un segundo experimento:
+1. Entrenar con diferente `MODEL_CONFIG` (e.g., `iris-classifier.yaml`) → registra modelos con otro prefijo en MLflow
+2. `GET /models` los lista automáticamente
+3. `POST /models/{nombre}/predict` los sirve sin reiniciar el API
+
+**Backward compatibility:** los endpoints `/predict`, `/reload`, `/health`, `/info` no cambian. Los tests existentes siguen pasando.
+
+**Tests añadidos** (`tests/test_api.py`):
+- `TestGenericModelList` — verifica `/models` lista correctamente los 8 modelos HRI
+- `TestGenericModelGet` — verifica `/models/{name}` devuelve metadata correcta + 404 para no existentes
+- `TestGenericPredict` — verifica predicción, schema, tipo numérico, latencia SLA, cache hit
+
+**Prometheus:** nueva métrica `inference_generic_predictions_total{model}` — contador por nombre de modelo.
+
+---
+
 ## Block 3 — Prometheus + Grafana (Observabilidad)  |  2026-06-18
 
 ### Gap 6 — Métricas de operación con Prometheus + Grafana

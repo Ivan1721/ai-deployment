@@ -127,11 +127,20 @@ All pipelines include `StandardScaler` — required for SVR and MLP. XGBoost/Lig
 
 ### Inference API (`inference-api/app.py`)
 
-On startup, loads all 8 models from `models:/hri-{scenario}-{target}/Production`. The in-memory `state["models"]` dict is keyed by `{scenario_label: {target_alias: model}}`.
+Two API surfaces on the same FastAPI app (version 3.0.0):
 
-- `POST /predict` — takes `{scenario, workers, crop_row, rand_pos, activity}`, encodes activity to one-hot, returns all 4 targets in one call.
-- `GET /health` — reports `models_loaded` (should be 8); `"degraded"` if < 8.
-- `POST /reload` — hot-reloads all 8 models without container restart.
+**HRI-specific (backward compat):**
+- `GET /health` — `models_loaded` (should be 8); `"degraded"` if < 8.
+- `GET /info` — scenarios, targets, features, activities.
+- `POST /predict` — takes `{scenario, workers, crop_row, rand_pos, activity}`, encodes activity to one-hot, returns all 4 targets.
+- `POST /reload` — hot-reloads the 8 HRI models + clears generic model cache.
+
+**Generic (Gap 1 + Gap 2 — multi-experiment):**
+- `GET /models` — lists all registered models in `Production` stage (any experiment).
+- `GET /models/{name}` — metadata for a specific model (version, stage, run_id).
+- `POST /models/{name}/predict` — predicts with any sklearn model in the registry. Takes `{"features": {"col": value, ...}, "stage": "Production"}`. Loads on first call, caches in `_model_cache` dict keyed by `"{name}/{stage}"`.
+
+The generic endpoints enable multi-experiment: run model-trainer with a different `MODEL_CONFIG` (e.g., `iris-classifier.yaml`) and the new models appear in `GET /models` and are servable via `POST /models/{name}/predict` without any API changes.
 
 ### Drift Detector (`drift-detector/detector.py`)
 

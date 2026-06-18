@@ -1,19 +1,30 @@
 """
 app.py  -  Inference API
 ------------------------
-Serves the 8 HRI harvesting models (2 scenarios x 4 targets) from MLflow.
-Accepts operational configuration and returns all 4 regression targets.
+Two API surfaces:
+
+  HRI-specific (backward compat):
+    GET  /health  /info
+    POST /predict           — takes HRI operational fields, returns 4 targets
+    POST /reload            — hot-reloads the 8 HRI Production models
+
+  Generic (Gap 1 + Gap 2 — multi-experiment):
+    GET  /models            — list all models in Production across any experiment
+    GET  /models/{name}     — metadata for one registered model
+    POST /models/{name}/predict  — predict with any sklearn model in the registry;
+                                   accepts a flat feature dict, caches model in memory
 """
 
 import os
 import time
 import logging
 from contextlib import asynccontextmanager
-from typing import Dict
+from typing import Any, Dict, List, Union
 
 import mlflow
 import mlflow.sklearn
 import pandas as pd
+from mlflow.tracking import MlflowClient
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
@@ -34,12 +45,11 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 def _check_api_key(key: str = Depends(_api_key_header)) -> None:
-    """Validates X-API-Key header. Disabled when API_KEY env var is not set."""
     if API_KEY and key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
 
 
-# Load configuration from MODEL_CONFIG YAML
+# Load HRI configuration
 _cfg = load_config()
 _ms  = _cfg.multi_slot
 
@@ -48,7 +58,11 @@ TARGETS         = _ms.targets         if _ms else {}
 FEATURE_NAMES   = _ms.feature_names   if _ms else []
 ACTIVITY_VALUES = ["harv_ground", "harv_ladder", "harv_mixed", "harv_picker"]
 
+# HRI model state (8 pre-loaded models)
 state: Dict = {"models": {}, "loaded_at": None}
+
+# Generic model cache: "{name}/{stage}" → loaded sklearn model
+_model_cache: Dict[str, Any] = {}
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 REQUESTS_TOTAL = Counter(
@@ -64,14 +78,21 @@ REQUEST_DURATION = Histogram(
 )
 MODELS_LOADED = Gauge(
     "inference_models_loaded",
-    "Number of models currently loaded (target: 8)",
+    "Number of HRI models currently loaded (target: 8)",
 )
 PREDICTIONS_TOTAL = Counter(
     "inference_predictions_total",
-    "Total prediction requests by scenario and activity",
+    "HRI prediction requests by scenario and activity",
     ["scenario", "activity"],
 )
+GENERIC_PREDICTIONS_TOTAL = Counter(
+    "inference_generic_predictions_total",
+    "Generic model prediction requests by model name",
+    ["model"],
+)
 
+
+# ── HRI helpers ───────────────────────────────────────────────────────────────
 
 def _encode_activity(activity: str) -> Dict[str, int]:
     return {
@@ -114,10 +135,16 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# ── App ───────────────────────────────────────────────────────────────────────
+
 app = FastAPI(
     title="HRI Harvesting Inference API",
-    description="Predicts harvesting productivity and workload for Human-Only and Human-Robot scenarios.",
-    version="2.0.0",
+    description=(
+        "Two API surfaces: HRI-specific endpoints (/predict, /reload) for the "
+        "harvesting regression models, and generic endpoints (/models/*) for any "
+        "sklearn model registered in MLflow."
+    ),
+    version="3.0.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -128,7 +155,6 @@ app.add_middleware(
     max_age=3600,
 )
 
-# Prometheus metrics endpoint
 app.mount("/metrics", make_asgi_app())
 
 
@@ -142,6 +168,8 @@ async def _metrics_middleware(request: Request, call_next):
     REQUESTS_TOTAL.labels(endpoint=request.url.path, status=str(response.status_code)).inc()
     return response
 
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
 
 class PredictRequest(BaseModel):
     scenario: int = Field(..., description="0=Human-Only, 1=Human-Robot", ge=0, le=1)
@@ -165,6 +193,40 @@ class PredictResponse(BaseModel):
     model_stage:         str
     loaded_at:           str
 
+
+class GenericPredictRequest(BaseModel):
+    features: Dict[str, float] = Field(
+        ...,
+        description="Feature name → value mapping. Keys must match the model's training features.",
+    )
+    stage: str = Field("Production", description="MLflow model stage to use")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "features": {
+                    "Humans": 6, "ROW_N": 2, "RandomPosition": 0,
+                    "Act_Ladder": 0, "Act_Mixed": 0, "Act_Picker": 0
+                },
+                "stage": "Production",
+            }
+        }
+
+
+class GenericPredictResponse(BaseModel):
+    model:      str
+    stage:      str
+    prediction: Union[float, List[float]]
+
+
+class ModelInfo(BaseModel):
+    name:    str
+    version: str
+    stage:   str
+    run_id:  str
+
+
+# ── HRI-specific endpoints ────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
@@ -220,8 +282,84 @@ def predict(req: PredictRequest):
 
 @app.post("/reload", dependencies=[Depends(_check_api_key)])
 def reload_models():
+    _model_cache.clear()
     load_all_models(retries=3, delay=2)
     total = sum(len(v) for v in state["models"].values())
     if total == 0:
         raise HTTPException(503, "Reload failed -- no models loaded.")
-    return {"status": "reloaded", "models_loaded": total}
+    return {"status": "reloaded", "models_loaded": total, "generic_cache_cleared": True}
+
+
+# ── Generic model endpoints (Gap 1 + Gap 2) ───────────────────────────────────
+
+@app.get("/models", response_model=List[ModelInfo], dependencies=[Depends(_check_api_key)])
+def list_models():
+    """List all models that have a Production version in the MLflow registry."""
+    mlflow.set_tracking_uri(TRACKING_URI)
+    client = MlflowClient()
+    result = []
+    try:
+        for rm in client.search_registered_models():
+            versions = client.get_latest_versions(rm.name, stages=["Production"])
+            if versions:
+                v = versions[0]
+                result.append(ModelInfo(
+                    name=rm.name,
+                    version=v.version,
+                    stage=v.current_stage,
+                    run_id=v.run_id,
+                ))
+    except Exception as e:
+        raise HTTPException(503, f"MLflow unavailable: {e}")
+    return result
+
+
+@app.get("/models/{name}", response_model=ModelInfo, dependencies=[Depends(_check_api_key)])
+def get_model(name: str, stage: str = "Production"):
+    """Return metadata for a specific registered model."""
+    mlflow.set_tracking_uri(TRACKING_URI)
+    client = MlflowClient()
+    try:
+        versions = client.get_latest_versions(name, stages=[stage])
+    except Exception as e:
+        raise HTTPException(503, f"MLflow unavailable: {e}")
+    if not versions:
+        raise HTTPException(404, f"No '{stage}' version found for model '{name}'")
+    v = versions[0]
+    return ModelInfo(name=name, version=v.version, stage=v.current_stage, run_id=v.run_id)
+
+
+@app.post(
+    "/models/{name}/predict",
+    response_model=GenericPredictResponse,
+    dependencies=[Depends(_check_api_key)],
+)
+def generic_predict(name: str, req: GenericPredictRequest):
+    """
+    Predict with any sklearn model registered in MLflow.
+    The model is loaded on first call and cached in memory for subsequent requests.
+    Features must match the model's training schema exactly.
+    """
+    cache_key = f"{name}/{req.stage}"
+    if cache_key not in _model_cache:
+        mlflow.set_tracking_uri(TRACKING_URI)
+        try:
+            _model_cache[cache_key] = mlflow.sklearn.load_model(
+                f"models:/{name}/{req.stage}"
+            )
+            log.info(f"Cached generic model {cache_key}")
+        except Exception as e:
+            raise HTTPException(503, f"Could not load model '{name}' (stage={req.stage}): {e}")
+
+    model = _model_cache[cache_key]
+    X = pd.DataFrame([req.features])
+    try:
+        raw = model.predict(X)
+        prediction: Union[float, List[float]] = (
+            float(raw[0]) if len(raw) == 1 else [float(v) for v in raw]
+        )
+    except Exception as e:
+        raise HTTPException(422, f"Prediction failed for model '{name}': {e}")
+
+    GENERIC_PREDICTIONS_TOTAL.labels(model=name).inc()
+    return GenericPredictResponse(model=name, stage=req.stage, prediction=prediction)
