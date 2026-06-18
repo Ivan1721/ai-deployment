@@ -48,6 +48,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── Pull dataset desde DVC remote ─────────────────────────────────
+      - name: Pull data with DVC
+        run: dvc pull
+
       # ── Construir imágenes (usa cache local del host) ──────────────────
       - name: Build images
         run: docker compose build --parallel
@@ -82,6 +86,7 @@ jobs:
           docker compose run --rm \
             -e MLFLOW_TRACKING_URI=http://mlflow:5001 \
             -e INFERENCE_API_URL=http://inference-api:8000 \
+            -e API_KEY=${{ secrets.API_KEY }} \
             test-runner
 
       # ── Limpiar contenedores CI (NO los volúmenes — MLFlow persiste) ──

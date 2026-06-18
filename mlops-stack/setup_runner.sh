@@ -68,6 +68,20 @@ else
   echo "  Docker: $(docker --version) ✓"
 fi
 
+# ── 2a. DVC ───────────────────────────────────────────────────────────────
+DVC_REMOTE="${DVC_REMOTE:-/opt/mlops-dvc-store}"
+if ! command -v dvc &>/dev/null; then
+  echo "▶ Installing DVC..."
+  apt-get install -y python3-pip --quiet 2>/dev/null || true
+  pip3 install dvc --quiet 2>/dev/null || pip install dvc --quiet
+  echo "  DVC $(dvc --version) installed ✓"
+else
+  echo "  DVC: $(dvc --version) ✓"
+fi
+mkdir -p "$DVC_REMOTE"
+chown "$RUNNER_USER:$RUNNER_USER" "$DVC_REMOTE"
+echo "  DVC remote dir ready: $DVC_REMOTE ✓"
+
 # ── 2. Docker Compose plugin ───────────────────────────────────────────────
 if ! docker compose version &>/dev/null; then
   echo "▶ Installing Docker Compose..."

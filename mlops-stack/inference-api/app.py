@@ -14,8 +14,9 @@ from typing import Dict
 import mlflow
 import mlflow.sklearn
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
 
 from mlops_common import load_config
@@ -27,6 +28,15 @@ TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE", "Production")
 # <<<<<<< feature/dataset-update
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000").split(",")
+API_KEY      = os.environ.get("API_KEY", "")
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def _check_api_key(key: str = Depends(_api_key_header)) -> None:
+    """Validates X-API-Key header. Disabled when API_KEY env var is not set."""
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
 
 # Load configuration from MODEL_CONFIG YAML
 _cfg = load_config()
@@ -161,7 +171,7 @@ def info():
     }
 
 
-@app.post("/predict", response_model=PredictResponse)
+@app.post("/predict", response_model=PredictResponse, dependencies=[Depends(_check_api_key)])
 def predict(req: PredictRequest):
     if req.activity not in ACTIVITY_VALUES:
         raise HTTPException(422, f"activity must be one of {ACTIVITY_VALUES}")
@@ -190,7 +200,7 @@ def predict(req: PredictRequest):
     )
 
 
-@app.post("/reload")
+@app.post("/reload", dependencies=[Depends(_check_api_key)])
 def reload_models():
     load_all_models(retries=3, delay=2)
     total = sum(len(v) for v in state["models"].values())

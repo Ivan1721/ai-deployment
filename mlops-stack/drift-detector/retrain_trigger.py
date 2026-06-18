@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 
 INFERENCE_URL = os.environ.get("INFERENCE_API_URL", "http://inference-api:8000")
 MIN_DELTA     = float(os.environ.get("CHALLENGER_MIN_IMPROVEMENT", "0.0"))
+API_KEY       = os.environ.get("API_KEY", "")
 
 CHALLENGER_PARAMS = {
     "n_estimators": 200, "max_depth": 4,
@@ -67,9 +68,12 @@ def _challenger_r2(client: MlflowClient, model_name: str) -> tuple:
 def _reload_api():
     try:
         import urllib.request
+        headers = {"Content-Type": "application/json"}
+        if API_KEY:
+            headers["X-API-Key"] = API_KEY
         req  = urllib.request.Request(
             f"{INFERENCE_URL}/reload", data=b"", method="POST",
-            headers={"Content-Type": "application/json"},
+            headers=headers,
         )
         resp = urllib.request.urlopen(req, timeout=30)
         log.info(f"API reload: {resp.status}")

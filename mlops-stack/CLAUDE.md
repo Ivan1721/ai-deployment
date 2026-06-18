@@ -27,13 +27,21 @@ docker compose run --rm test-runner python -m pytest test_model.py -v
 # Run tests with custom gates
 docker compose run --rm -e GATE_MIN_R2=0.80 -e GATE_MAX_SMAPE=15 test-runner
 
-# Quick predict (scenario 0 = HumanOnly)
+# Quick predict — via HTTPS (nginx, -k skips self-signed cert warning)
+curl -k -X POST https://localhost/api/predict \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $(grep API_KEY .env | cut -d= -f2)" \
+  -d '{"scenario":0,"workers":6,"crop_row":2,"rand_pos":0,"activity":"harv_mixed"}'
+
+# Quick predict — direct to inference-api (bypasses nginx, still needs key)
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $(grep API_KEY .env | cut -d= -f2)" \
   -d '{"scenario":0,"workers":6,"crop_row":2,"rand_pos":0,"activity":"harv_mixed"}'
 
 # Hot-reload models in inference-api without restart
-curl -X POST http://localhost:8000/reload
+curl -k -X POST https://localhost/api/reload \
+  -H "X-API-Key: $(grep API_KEY .env | cut -d= -f2)"
 
 # Watch drift detector logs
 docker compose logs -f drift-detector
@@ -42,6 +50,25 @@ docker compose logs -f drift-detector
 flake8 model-trainer/train.py inference-api/app.py drift-detector/detector.py \
   tests/run_tests.py tests/test_data.py tests/test_model.py tests/test_api.py \
   --max-line-length=110 --extend-ignore=E501,W503
+```
+
+## Data (DVC)
+
+`data/simulation_all.csv` is tracked by DVC, not git. After cloning the repo:
+
+```bash
+# First time: push data to DVC remote (only once, from the machine that has the CSV)
+cd mlops-stack
+dvc push
+
+# On any other machine / CI: pull data before running
+dvc pull
+```
+
+The DVC remote is a local directory at `/opt/mlops-dvc-store` (configured in `mlops-stack/.dvc/config`). On a new server, create it with:
+```bash
+sudo mkdir -p /opt/mlops-dvc-store
+sudo chown $USER:$USER /opt/mlops-dvc-store
 ```
 
 ## Configuration (mlops_common)
@@ -67,7 +94,8 @@ To switch to Iris classification mode, change `MODEL_CONFIG` in docker-compose.y
 
 | Service | Port | Restart | Role |
 |---|---|---|---|
-| `mlflow` | 5001 | unless-stopped | Tracking server + Model Registry (SQLite + filesystem artifacts) |
+| `postgres` | — | unless-stopped | PostgreSQL 16 — MLflow metadata backend (runs, params, metrics) |
+| `mlflow` | 5001 | unless-stopped | Tracking server + Model Registry (PostgreSQL backend + filesystem artifacts) |
 | `model-trainer` | — | no | One-shot training job; exits after registering 8 models |
 | `inference-api` | 8000 | unless-stopped | FastAPI; loads all 8 Production models at startup |
 | `drift-detector` | — | unless-stopped | Background loop; KS tests + performance drift every 30s |
@@ -158,4 +186,4 @@ export BUILDX_BUILDER=mlops-builder
 
 ### When to use `docker compose down -v`
 
-Required when `train.py` changes (new metrics, new model structure) because old models in the `mlflow-data` volume lack the new metadata and tests will fail against them. Without `-v`, just rebuilding images is sufficient.
+Required when `train.py` changes (new metrics, new model structure) because old models in the `mlflow-data` volume lack the new metadata and tests will fail against them. Also required when switching from SQLite to PostgreSQL backend for the first time (MLflow can't migrate automatically). Without `-v`, just rebuilding images is sufficient.

@@ -37,6 +37,7 @@ log = logging.getLogger(__name__)
 # ── config ────────────────────────────────────────────────────────────────────
 MLFLOW_URI   = os.environ.get("MLFLOW_TRACKING_URI",       "http://mlflow:5001")
 INFER_URL    = os.environ.get("INFERENCE_API_URL",          "http://inference-api:8000")
+API_KEY      = os.environ.get("API_KEY",                    "")
 DATASET_PATH = os.environ.get("DATASET_PATH",               "/data/simulation_all.csv")
 KS_THR       = float(os.environ.get("KS_P_VALUE_THRESHOLD",    "0.05"))
 CONSEC_NEED  = int(os.environ.get("CONSECUTIVE_DRIFT_WINDOWS", "2"))
@@ -106,9 +107,12 @@ def _predict_api(scenario: int, workers: int, crop_row: int,
         "scenario": scenario, "workers": workers,
         "crop_row": crop_row, "rand_pos": rand_pos, "activity": activity,
     }).encode()
+    headers = {"Content-Type": "application/json"}
+    if API_KEY:
+        headers["X-API-Key"] = API_KEY
     req = urllib.request.Request(
         f"{INFER_URL}/predict", data=body,
-        headers={"Content-Type": "application/json"}, method="POST",
+        headers=headers, method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=5) as r:

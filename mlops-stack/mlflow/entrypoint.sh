@@ -1,24 +1,22 @@
 #!/bin/bash
 set -e
 
-# Crear directorios necesarios dentro del volumen montado
-# Esto corre DESPUÉS de que Docker monta el volumen, así que los permisos persisten
 mkdir -p /mlflow/artifacts
-# <<<<<<< feature/dataset-update
-# =======
-
-# SECURITY FIX P0-5: Restringir permisos
-# - Base de datos: 700 (solo dueño puede leer/escribir)
-# - Artifacts: 755 (dueño lee/escribe, otros solo leen)
-# >>>>>>> develop
-chmod 700 /mlflow/mlflow.db 2>/dev/null || true
 chmod 755 /mlflow/artifacts
-chown -R mlflow:mlflow /mlflow 2>/dev/null || true
 
-echo "MLFlow data dir ready: $(ls -la /mlflow)"
+if [ -n "$POSTGRES_URI" ]; then
+    BACKEND_URI="$POSTGRES_URI"
+else
+    # Fallback for local dev without postgres
+    chmod 700 /mlflow/mlflow.db 2>/dev/null || true
+    BACKEND_URI="sqlite:////mlflow/mlflow.db"
+fi
+
+echo "MLFlow backend: ${BACKEND_URI%%@*}@..."
+echo "MLFlow data dir: $(ls -la /mlflow)"
 
 exec mlflow server \
-    --backend-store-uri sqlite:////mlflow/mlflow.db \
+    --backend-store-uri "$BACKEND_URI" \
     --default-artifact-root /mlflow/artifacts \
     --host 0.0.0.0 \
     --port 5001

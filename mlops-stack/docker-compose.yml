@@ -10,29 +10,50 @@ networks:
     driver: bridge
 
 volumes:
-  mlflow-data:   # persiste entre deploys y reboots
-  keycloak-data: # SECURITY FIX P0-1: Datos persistentes de Keycloak
+  mlflow-data:    # artefactos MLflow — persiste entre deploys y reboots
+  postgres-data:  # backend de MLflow (metadata de runs, modelos, parámetros)
+  keycloak-data:  # datos persistentes de Keycloak (SSO browser auth)
 
 services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: mlops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       mlflow
+      POSTGRES_USER:     mlflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mlflow", "-d", "mlflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - mlops-net
 
   mlflow:
     build: ./mlflow
     container_name: mlflow-server
     restart: unless-stopped
     ports:
-# <<<<<<< feature/dataset-update
       - "127.0.0.1:5001:5001"       # localhost-only: no exponer a la red pública
-# =======
-#       - "127.0.0.1:5001:5001"        # SECURITY FIX P0-4: localhost-only, no exponer públicamente
-# >>>>>>> develop
+    environment:
+      POSTGRES_URI: postgresql://mlflow:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/mlflow
     volumes:
       - mlflow-data:/mlflow
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:5001/"]
       interval: 5s
       timeout: 10s
       retries: 20
-      start_period: 10s
+      start_period: 15s
     networks:
       - mlops-net
 
@@ -62,16 +83,13 @@ services:
     container_name: inference-api
     restart: unless-stopped
     ports:
-# <<<<<<< feature/dataset-update
-#       - "127.0.0.1:8000:8000"       # localhost-only: acceso público solo vía nginx
-# =======
-      - "127.0.0.1:8000:8000"        # SECURITY FIX P0-4: localhost-only, solo nginx puede acceder públicamente
-# >>>>>>> develop
+      - "127.0.0.1:8000:8000"       # localhost-only: acceso público solo vía nginx
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
       MODEL_STAGE:         Production
       MODEL_CONFIG:        /app/configs/hri-harvesting.yaml
       DATASET_PATH:        /data/simulation_all.csv
+      API_KEY:             ${API_KEY:-}
     volumes:
       - mlflow-data:/mlflow
       - ./data:/data:ro
@@ -106,6 +124,7 @@ services:
       PERF_DRIFT_EFFECT_SIZE:    "0.05"
       PERF_DRIFT_P_VALUE:        "0.05"
       PERF_DRIFT_CONSECUTIVE:    "2"
+      API_KEY:                   ${API_KEY:-}
     volumes:
       - mlflow-data:/mlflow
       - ./data:/data:ro
@@ -130,6 +149,7 @@ services:
       GATE_MIN_R2:         "0.70"
       GATE_MAX_SMAPE:      "20.0"
       GATE_MAX_LATENCY_MS: "500"
+      API_KEY:             ${API_KEY:-}
     volumes:
       - mlflow-data:/mlflow
       - ./data:/data:ro
@@ -144,29 +164,27 @@ services:
     container_name: nginx-proxy
     restart: unless-stopped
     ports:
-      - "80:80"                      # HTTP → redirige a HTTPS
-      - "443:443"                    # SECURITY FIX P0-3: HTTPS
-    volumes:
-      - ./nginx/certs:/etc/nginx/certs:ro  # Certificados (read-only)
+      - "80:80"
+      - "443:443"
     depends_on:
       - mlflow
       - inference-api
     networks:
       - mlops-net
 
-  # SECURITY FIX P0-1: Keycloak para autenticación
+  # Keycloak — SSO para acceso browser a MLflow UI
   keycloak:
     image: quay.io/keycloak/keycloak:23.0.7
     container_name: keycloak
     restart: unless-stopped
     environment:
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin123  # DEBE CAMBIAR en producción
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
       KC_DB: h2
       KC_HTTP_ENABLED: "true"
-      KC_HOSTNAME_STRICT_HTTPS: "false"  # Permitir HTTP para desarrollo
+      KC_HOSTNAME_STRICT_HTTPS: "false"
     ports:
-      - "127.0.0.1:8080:8080"  # localhost-only
+      - "127.0.0.1:8080:8080"       # localhost-only
     volumes:
       - keycloak-data:/opt/keycloak/data
     networks:
@@ -177,29 +195,27 @@ services:
       timeout: 5s
       retries: 20
 
-  # SECURITY FIX P0-1: OAuth2 Proxy para proteger endpoints
+  # OAuth2 Proxy — protege MLflow UI con autenticación Keycloak
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.5.1
     container_name: oauth2-proxy
     restart: unless-stopped
     environment:
-      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_PROVIDER:              oidc
       OAUTH2_PROXY_PROVIDER_DISPLAY_NAME: Keycloak
-      OAUTH2_PROXY_OIDC_ISSUER_URL: http://keycloak:8080/realms/mlops
-      OAUTH2_PROXY_CLIENT_ID: mlops-client
-      OAUTH2_PROXY_CLIENT_SECRET: mlops-client-secret  # DEBE CAMBIAR en producción
-      OAUTH2_PROXY_REDIRECT_URL: https://localhost/oauth2/callback
-      OAUTH2_PROXY_COOKIE_SECRET: $(openssl rand -base64 32)  # Genera secret aleatorio
-      OAUTH2_PROXY_COOKIE_SECURE: "true"
-      OAUTH2_PROXY_COOKIE_HTTPONLY: "true"
-      OAUTH2_PROXY_COOKIE_SAMESITE: "Strict"
-      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
-      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
-      # Rutas protegidas
-      OAUTH2_PROXY_SKIP_AUTH_PATHS: "^/oauth2/.*"
-      OAUTH2_PROXY_SKIP_AUTH_ROUTES: ""
+      OAUTH2_PROXY_OIDC_ISSUER_URL:       http://keycloak:8080/realms/mlops
+      OAUTH2_PROXY_CLIENT_ID:             mlops-client
+      OAUTH2_PROXY_CLIENT_SECRET:         ${OAUTH2_CLIENT_SECRET:-mlops-client-secret}
+      OAUTH2_PROXY_REDIRECT_URL:          https://localhost/oauth2/callback
+      OAUTH2_PROXY_COOKIE_SECRET:         ${OAUTH2_COOKIE_SECRET:-change-me-32-chars-minimum!!}
+      OAUTH2_PROXY_COOKIE_SECURE:         "true"
+      OAUTH2_PROXY_COOKIE_HTTPONLY:       "true"
+      OAUTH2_PROXY_COOKIE_SAMESITE:       "Strict"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:  "true"
+      OAUTH2_PROXY_HTTP_ADDRESS:          0.0.0.0:4180
+      OAUTH2_PROXY_SKIP_AUTH_PATHS:       "^/oauth2/.*"
     ports:
-      - "127.0.0.1:4180:4180"  # localhost-only
+      - "127.0.0.1:4180:4180"       # localhost-only
     depends_on:
       keycloak:
         condition: service_healthy
@@ -210,4 +226,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
-

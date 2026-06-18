@@ -1,0 +1,1638 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1400 850"
+   width="1400"
+   height="850"
+   font-family="'Segoe UI', Arial, sans-serif"
+   version="1.1"
+   id="svg150"
+   sodipodi:docname="ARCHITECTURE.svg"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview150"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:zoom="0.6713355"
+     inkscape:cx="498.26056"
+     inkscape:cy="653.17565"
+     inkscape:window-width="1920"
+     inkscape:window-height="1009"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg150" />
+  <defs
+     id="defs7">
+    <marker
+       id="arr"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="6"
+       markerHeight="6"
+       orient="auto">
+      <path
+         d="M0 0 L10 5 L0 10z"
+         fill="#64748B"
+         id="path1" />
+    </marker>
+    <marker
+       id="arr-b"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="6"
+       markerHeight="6"
+       orient="auto">
+      <path
+         d="M0 0 L10 5 L0 10z"
+         fill="#2563EB"
+         id="path2" />
+    </marker>
+    <marker
+       id="arr-r"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="6"
+       markerHeight="6"
+       orient="auto">
+      <path
+         d="M0 0 L10 5 L0 10z"
+         fill="#DC2626"
+         id="path3" />
+    </marker>
+    <marker
+       id="arr-g"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="6"
+       markerHeight="6"
+       orient="auto">
+      <path
+         d="M0 0 L10 5 L0 10z"
+         fill="#16A34A"
+         id="path4" />
+    </marker>
+    <marker
+       id="arr-o"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="6"
+       markerHeight="6"
+       orient="auto">
+      <path
+         d="M0 0 L10 5 L0 10z"
+         fill="#D97706"
+         id="path5" />
+    </marker>
+    <marker
+       id="arr-p"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="6"
+       markerHeight="6"
+       orient="auto">
+      <path
+         d="M0 0 L10 5 L0 10z"
+         fill="#7C3AED"
+         id="path6" />
+    </marker>
+    <marker
+       id="arr-y"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="6"
+       markerHeight="6"
+       orient="auto">
+      <path
+         d="M0 0 L10 5 L0 10z"
+         fill="#B45309"
+         id="path7" />
+    </marker>
+  </defs>
+  <!-- Background -->
+  <rect
+     width="1400"
+     height="850"
+     fill="#FFFFFF"
+     id="rect7" />
+  <!-- TITLE -->
+  <text
+     x="700"
+     y="30"
+     font-size="20"
+     font-weight="bold"
+     fill="#0F172A"
+     text-anchor="middle"
+     id="text7">MLOps Stack — HRI Agricultural Harvesting</text>
+  <text
+     x="700"
+     y="50"
+     font-size="11"
+     fill="#64748B"
+     text-anchor="middle"
+     id="text8">2 scenarios × 4 targets = 8 production models · Docker Compose · MLflow · FastAPI · Strategy + Registry pattern</text>
+  <!-- DOCKER NETWORK BOX — row2 shifted down, extra height -->
+  <rect
+     x="25.003113"
+     y="62.003151"
+     width="1358.4199"
+     height="625.99371"
+     rx="12.074844"
+     fill="#f0f9ff"
+     stroke="#7dd3fc"
+     stroke-width="2"
+     stroke-dasharray="8, 4"
+     id="rect8" />
+  <text
+     x="44"
+     y="78"
+     font-size="10"
+     font-weight="bold"
+     fill="#0369A1"
+     id="text9">docker-compose.yml · network: mlops-net</text>
+  <!-- mlops_common banner -->
+  <rect
+     x="44"
+     y="83"
+     width="1312"
+     height="38"
+     rx="6"
+     fill="#ECFDF5"
+     stroke="#6EE7B7"
+     stroke-width="1.5"
+     id="rect9" />
+  <text
+     x="700"
+     y="99"
+     font-size="11"
+     font-weight="bold"
+     fill="#065F46"
+     text-anchor="middle"
+     id="text10">mlops_common/ — shared package (copied into every container at build time)</text>
+  <text
+     x="700"
+     y="114"
+     font-size="9"
+     fill="#047857"
+     text-anchor="middle"
+     id="text11">config.py (ExperimentConfig + MultiSlotConfig) · data_sources/ (hri_csv, csv, sklearn_dataset) · models/ (14 strategies) · problem_types/ (regression, classification)</text>
+  <!-- ══════════════════════════════════════════════════════════════
+       ROW 1  —  y=131, height=185, bottom=316
+       nginx(44-179) | inference-api(192-457) | MLflow(472-757) | model-trainer(772-1375)
+  ══════════════════════════════════════════════════════════════ -->
+  <!-- nginx -->
+  <rect
+     x="44"
+     y="131"
+     width="135"
+     height="185"
+     rx="8"
+     fill="#DBEAFE"
+     stroke="#60A5FA"
+     stroke-width="1.5"
+     id="rect11" />
+  <text
+     x="111"
+     y="152"
+     font-size="12"
+     font-weight="bold"
+     fill="#1E3A8A"
+     text-anchor="middle"
+     id="text12">nginx</text>
+  <text
+     x="111"
+     y="167"
+     font-size="9"
+     fill="#1D4ED8"
+     text-anchor="middle"
+     id="text13">reverse proxy · :80</text>
+  <line
+     x1="54"
+     y1="176"
+     x2="169"
+     y2="176"
+     stroke="#93C5FD"
+     stroke-width="0.8"
+     id="line13" />
+  <text
+     x="111"
+     y="191"
+     font-size="9"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text14">/mlflow/ → :5001</text>
+  <text
+     x="111"
+     y="206"
+     font-size="9"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text15">/api/   → :8000</text>
+  <line
+     x1="54"
+     y1="216"
+     x2="169"
+     y2="216"
+     stroke="#93C5FD"
+     stroke-width="0.8"
+     id="line15" />
+  <text
+     x="111"
+     y="231"
+     font-size="9"
+     fill="#1D4ED8"
+     text-anchor="middle"
+     id="text16">public · port :80</text>
+  <text
+     x="111"
+     y="248"
+     font-size="8"
+     fill="#3B82F6"
+     text-anchor="middle"
+     id="text17">(no TLS yet)</text>
+  <text
+     x="111"
+     y="307"
+     font-size="8"
+     fill="#3B82F6"
+     text-anchor="middle"
+     font-style="italic"
+     id="text18">unless-stopped</text>
+  <!-- inference-api -->
+  <rect
+     x="192"
+     y="131"
+     width="265"
+     height="185"
+     rx="8"
+     fill="#D1FAE5"
+     stroke="#34D399"
+     stroke-width="1.5"
+     id="rect18" />
+  <text
+     x="324"
+     y="152"
+     font-size="12"
+     font-weight="bold"
+     fill="#064E3B"
+     text-anchor="middle"
+     id="text19">inference-api</text>
+  <text
+     x="324"
+     y="167"
+     font-size="9"
+     fill="#065F46"
+     text-anchor="middle"
+     id="text20">FastAPI · 127.0.0.1:8000 (localhost-only)</text>
+  <line
+     x1="202"
+     y1="176"
+     x2="447"
+     y2="176"
+     stroke="#6EE7B7"
+     stroke-width="0.8"
+     id="line20" />
+  <text
+     x="222"
+     y="192"
+     font-size="9"
+     fill="#065F46"
+     text-anchor="start"
+     id="text21">GET  /health  → models_loaded: 0–8</text>
+  <text
+     x="222"
+     y="207"
+     font-size="9"
+     fill="#065F46"
+     text-anchor="start"
+     id="text22">GET  /info    → scenarios · targets</text>
+  <text
+     x="222"
+     y="222"
+     font-size="9"
+     fill="#065F46"
+     text-anchor="start"
+     id="text23">POST /predict → 4 regression targets</text>
+  <text
+     x="222"
+     y="237"
+     font-size="9"
+     fill="#065F46"
+     text-anchor="start"
+     id="text24">POST /reload  → hot-swap models</text>
+  <line
+     x1="202"
+     y1="247"
+     x2="447"
+     y2="247"
+     stroke="#6EE7B7"
+     stroke-width="0.8"
+     id="line24" />
+  <text
+     x="324"
+     y="262"
+     font-size="9"
+     fill="#064E3B"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text25">8 sklearn Pipelines in memory</text>
+  <text
+     x="324"
+     y="277"
+     font-size="9"
+     fill="#047857"
+     text-anchor="middle"
+     id="text26">HumanOnly + WithRobot × 4 targets</text>
+  <text
+     x="324"
+     y="292"
+     font-size="8"
+     fill="#059669"
+     text-anchor="middle"
+     id="text27">CORS_ORIGINS env var · unless-stopped</text>
+  <text
+     x="324"
+     y="307"
+     font-size="8"
+     fill="#059669"
+     text-anchor="middle"
+     font-style="italic"
+     id="text28">load_config() drives SCENARIOS/TARGETS</text>
+  <!-- MLflow -->
+  <rect
+     x="472"
+     y="131"
+     width="285"
+     height="185"
+     rx="8"
+     fill="#FEE2E2"
+     stroke="#FCA5A5"
+     stroke-width="1.5"
+     id="rect28" />
+  <text
+     x="614"
+     y="152"
+     font-size="12"
+     font-weight="bold"
+     fill="#7F1D1D"
+     text-anchor="middle"
+     id="text29">MLflow Tracking Server</text>
+  <text
+     x="614"
+     y="167"
+     font-size="9"
+     fill="#991B1B"
+     text-anchor="middle"
+     id="text30">127.0.0.1:5001 (localhost-only) · unless-stopped</text>
+  <line
+     x1="482"
+     y1="176"
+     x2="747"
+     y2="176"
+     stroke="#FCA5A5"
+     stroke-width="0.8"
+     id="line30" />
+  <text
+     x="492"
+     y="192"
+     font-size="9"
+     fill="#7F1D1D"
+     text-anchor="start"
+     id="text31">Experiments:</text>
+  <text
+     x="492"
+     y="207"
+     font-size="8.5"
+     fill="#991B1B"
+     text-anchor="start"
+     id="text32">  hri-harvesting  (phase=comparison + winner)</text>
+  <text
+     x="492"
+     y="221"
+     font-size="8.5"
+     fill="#991B1B"
+     text-anchor="start"
+     id="text33">  drift-monitoring · performance-drift-monitoring</text>
+  <text
+     x="492"
+     y="235"
+     font-size="8.5"
+     fill="#991B1B"
+     text-anchor="start"
+     id="text34">  retraining-events · quality-assurance</text>
+  <line
+     x1="482"
+     y1="245"
+     x2="747"
+     y2="245"
+     stroke="#FCA5A5"
+     stroke-width="0.8"
+     id="line34" />
+  <text
+     x="614"
+     y="261"
+     font-size="9"
+     fill="#7F1D1D"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text35">Model Registry (8 slots → Production)</text>
+  <text
+     x="614"
+     y="276"
+     font-size="8.5"
+     fill="#991B1B"
+     text-anchor="middle"
+     id="text36">hri-{HumanOnly|WithRobot}-{4 targets}</text>
+  <text
+     x="614"
+     y="291"
+     font-size="8.5"
+     fill="#991B1B"
+     text-anchor="middle"
+     id="text37">None → Production if R² ≥ 0.70</text>
+  <text
+     x="614"
+     y="308"
+     font-size="8"
+     fill="#B91C1C"
+     text-anchor="middle"
+     id="text38">SQLite · mlflow-data vol · chmod 700/755</text>
+  <!-- model-trainer -->
+  <rect
+     x="772"
+     y="131"
+     width="603"
+     height="185"
+     rx="8"
+     fill="#EFF6FF"
+     stroke="#93C5FD"
+     stroke-width="1.5"
+     id="rect38" />
+  <text
+     x="1073"
+     y="152"
+     font-size="12"
+     font-weight="bold"
+     fill="#1E3A8A"
+     text-anchor="middle"
+     id="text39">model-trainer</text>
+  <text
+     x="1073"
+     y="167"
+     font-size="9"
+     fill="#1D4ED8"
+     text-anchor="middle"
+     id="text40">one-shot job · exits after registering 8 models · depends_on: mlflow healthy</text>
+  <line
+     x1="782"
+     y1="176"
+     x2="1365"
+     y2="176"
+     stroke="#93C5FD"
+     stroke-width="0.8"
+     id="line40" />
+  <rect
+     x="783"
+     y="182"
+     width="183"
+     height="120"
+     rx="4"
+     fill="#BFDBFE"
+     stroke="#93C5FD"
+     stroke-width="1"
+     id="rect40" />
+  <text
+     x="874"
+     y="198"
+     font-size="9"
+     fill="#1E3A8A"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text41">Phase 1 — Tournament</text>
+  <text
+     x="874"
+     y="213"
+     font-size="8.5"
+     fill="#1D4ED8"
+     text-anchor="middle"
+     id="text42">12 candidates × 5-fold CV</text>
+  <text
+     x="793"
+     y="228"
+     font-size="8"
+     fill="#1E40AF"
+     text-anchor="start"
+     id="text43">LinearReg · Ridge · Lasso</text>
+  <text
+     x="793"
+     y="242"
+     font-size="8"
+     fill="#1E40AF"
+     text-anchor="start"
+     id="text44">ElasticNet · SVR · ExtraTrees</text>
+  <text
+     x="793"
+     y="256"
+     font-size="8"
+     fill="#1E40AF"
+     text-anchor="start"
+     id="text45">RandomForest · GBM · MLP</text>
+  <text
+     x="793"
+     y="270"
+     font-size="8"
+     fill="#1E40AF"
+     text-anchor="start"
+     id="text46">XGBoost · LightGBM · CatBoost</text>
+  <text
+     x="874"
+     y="295"
+     font-size="8"
+     fill="#2563EB"
+     text-anchor="middle"
+     id="text47">logged: phase=comparison</text>
+  <rect
+     x="978"
+     y="182"
+     width="183"
+     height="120"
+     rx="4"
+     fill="#BFDBFE"
+     stroke="#93C5FD"
+     stroke-width="1"
+     id="rect47" />
+  <text
+     x="1069"
+     y="198"
+     font-size="9"
+     fill="#1E3A8A"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text48">Phase 2 — Winner</text>
+  <text
+     x="1069"
+     y="213"
+     font-size="8.5"
+     fill="#1D4ED8"
+     text-anchor="middle"
+     id="text49">Best CV-R² → full retrain</text>
+  <text
+     x="1069"
+     y="230"
+     font-size="8.5"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text50">ho_r2 · ho_rmse · ho_mae</text>
+  <text
+     x="1069"
+     y="245"
+     font-size="8.5"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text51">ho_smape · ho_max_error</text>
+  <text
+     x="1069"
+     y="262"
+     font-size="8.5"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text52">feature_ranking.json artifact</text>
+  <text
+     x="1069"
+     y="277"
+     font-size="8.5"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text53">Pipeline(StandardScaler+model)</text>
+  <text
+     x="1069"
+     y="295"
+     font-size="8"
+     fill="#2563EB"
+     text-anchor="middle"
+     id="text54">logged: phase=winner</text>
+  <rect
+     x="1173"
+     y="182"
+     width="183"
+     height="120"
+     rx="4"
+     fill="#BFDBFE"
+     stroke="#93C5FD"
+     stroke-width="1"
+     id="rect54" />
+  <text
+     x="1264"
+     y="198"
+     font-size="9"
+     fill="#1E3A8A"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text55">Phase 3 — Quality Gate</text>
+  <text
+     x="1264"
+     y="216"
+     font-size="8.5"
+     fill="#15803D"
+     text-anchor="middle"
+     id="text56">R² ≥ 0.70 → Production</text>
+  <text
+     x="1264"
+     y="231"
+     font-size="8.5"
+     fill="#DC2626"
+     text-anchor="middle"
+     id="text57">R² &lt; 0.70 → None (skip)</text>
+  <text
+     x="1264"
+     y="249"
+     font-size="8.5"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text58">sMAPE replaces MAPE</text>
+  <text
+     x="1264"
+     y="265"
+     font-size="8.5"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text59">(robust to zero targets)</text>
+  <text
+     x="1264"
+     y="283"
+     font-size="8.5"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text60">8 slots registered:</text>
+  <text
+     x="1264"
+     y="295"
+     font-size="8.5"
+     fill="#1E40AF"
+     text-anchor="middle"
+     id="text61">2 scenarios × 4 targets</text>
+  <!-- ══════════════════════════════════════════════════════════════
+       ROUTING CHANNEL  y=317–355  (40 px gap between rows)
+       Used only by arrows — no boxes here
+       Sub-channels at y=322 · 329 · 336 · 343 · 350
+  ══════════════════════════════════════════════════════════════ -->
+  <!-- ROW 1 → ROW 1 arrows (direct, no channel needed) -->
+  <!-- nginx → inference-api -->
+  <line
+     x1="179"
+     y1="215"
+     x2="190"
+     y2="215"
+     stroke="#2563EB"
+     stroke-width="2"
+     marker-end="url(#arr-b)"
+     id="line61" />
+  <!-- nginx → MLflow (arc above row 1) -->
+  <path
+     d="M 155 131 Q 330 95 470 148"
+     stroke="#2563EB"
+     stroke-width="1.5"
+     stroke-dasharray="5,3"
+     fill="none"
+     marker-end="url(#arr-b)"
+     id="path61" />
+  <text
+     x="313"
+     y="91"
+     font-size="8"
+     fill="#1D4ED8"
+     text-anchor="middle"
+     id="text62">/mlflow/</text>
+  <!-- model-trainer → MLflow (register) -->
+  <line
+     x1="770"
+     y1="222"
+     x2="759"
+     y2="222"
+     stroke="#2563EB"
+     stroke-width="2"
+     marker-end="url(#arr-b)"
+     id="line62" />
+  <text
+     x="764"
+     y="215"
+     font-size="8"
+     fill="#1D4ED8"
+     text-anchor="middle"
+     id="text63">register</text>
+  <!-- MLflow → inference-api (loads Production models) -->
+  <line
+     x1="470"
+     y1="262"
+     x2="459"
+     y2="262"
+     stroke="#DC2626"
+     stroke-width="2"
+     marker-end="url(#arr-r)"
+     id="line63" />
+  <text
+     x="464"
+     y="255"
+     font-size="8"
+     fill="#B91C1C"
+     text-anchor="middle"
+     id="text64">loads</text>
+  <!-- ══════════════════════════════════════════════════════════════
+       ROW 2  —  y=356, height=248, bottom=604
+       drift(44-327) | retrain(347-632) | test-runner(772-1375)
+  ══════════════════════════════════════════════════════════════ -->
+  <!-- drift-detector -->
+  <rect
+     x="44"
+     y="394"
+     width="283"
+     height="248"
+     rx="8"
+     fill="#fef3c7"
+     stroke="#fcd34d"
+     stroke-width="1.5"
+     id="rect64" />
+  <text
+     x="185"
+     y="415"
+     font-size="12px"
+     font-weight="bold"
+     fill="#78350f"
+     text-anchor="middle"
+     id="text65">drift-detector</text>
+  <text
+     x="185"
+     y="431"
+     font-size="9px"
+     fill="#92400e"
+     text-anchor="middle"
+     id="text66">background · CHECK_INTERVAL=30s · unless-stopped</text>
+  <line
+     x1="54"
+     y1="440"
+     x2="317"
+     y2="440"
+     stroke="#fcd34d"
+     stroke-width="0.8"
+     id="line66" />
+  <rect
+     x="54"
+     y="446"
+     width="264"
+     height="56"
+     rx="4"
+     fill="#fde68a"
+     stroke="#f59e0b"
+     stroke-width="0.8"
+     id="rect66" />
+  <text
+     x="186"
+     y="461"
+     font-size="9px"
+     fill="#78350f"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text67">① Data Drift — KS test</text>
+  <text
+     x="186"
+     y="476"
+     font-size="8.5px"
+     fill="#92400e"
+     text-anchor="middle"
+     id="text68">6 features vs reference dist. · p &lt; 0.05</text>
+  <text
+     x="186"
+     y="491"
+     font-size="8.5px"
+     fill="#92400e"
+     text-anchor="middle"
+     id="text69">+ KS on prediction distributions (concept drift)</text>
+  <rect
+     x="54"
+     y="509"
+     width="264"
+     height="62"
+     rx="4"
+     fill="#fde68a"
+     stroke="#f59e0b"
+     stroke-width="0.8"
+     id="rect69" />
+  <text
+     x="186"
+     y="524"
+     font-size="9px"
+     fill="#78350f"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text70">② Performance Drift — 3 layers</text>
+  <text
+     x="186"
+     y="539"
+     font-size="8.5px"
+     fill="#92400e"
+     text-anchor="middle"
+     id="text71">Effect size · one-sample t-test · EWMA</text>
+  <text
+     x="186"
+     y="554"
+     font-size="8.5px"
+     fill="#92400e"
+     text-anchor="middle"
+     id="text72">on R²/RMSE/MAE/sMAPE/MaxErr</text>
+  <text
+     x="186"
+     y="567"
+     font-size="8px"
+     fill="#92400e"
+     text-anchor="middle"
+     id="text73">≥2 metrics flagged → drift declared</text>
+  <line
+     x1="54"
+     y1="579"
+     x2="317"
+     y2="579"
+     stroke="#fcd34d"
+     stroke-width="0.8"
+     id="line73" />
+  <text
+     x="185"
+     y="594"
+     font-size="8.5px"
+     fill="#78350f"
+     text-anchor="middle"
+     id="text74">after CONSECUTIVE_WINDOWS=2 → triggers retrain</text>
+  <text
+     x="185"
+     y="610"
+     font-size="8.5px"
+     fill="#92400e"
+     text-anchor="middle"
+     id="text75">logs to: drift-monitoring + perf-drift-monitoring</text>
+  <!-- drift → retrain arrow (same row, direct) -->
+  <line
+     x1="327"
+     y1="510"
+     x2="345"
+     y2="510"
+     stroke="#d97706"
+     stroke-width="2"
+     marker-end="url(#arr-o)"
+     id="line75" />
+  <text
+     x="336"
+     y="504"
+     font-size="8px"
+     fill="#b45309"
+     text-anchor="middle"
+     id="text76">drift!</text>
+  <!-- retrain-trigger -->
+  <rect
+     x="347"
+     y="394"
+     width="285"
+     height="248"
+     rx="8"
+     fill="#fef9c3"
+     stroke="#fde047"
+     stroke-width="1.5"
+     id="rect76" />
+  <text
+     x="489"
+     y="415"
+     font-size="12px"
+     font-weight="bold"
+     fill="#713f12"
+     text-anchor="middle"
+     id="text77">retrain_trigger.py</text>
+  <text
+     x="489"
+     y="431"
+     font-size="9px"
+     fill="#854d0e"
+     text-anchor="middle"
+     id="text78">Champion / Challenger pattern</text>
+  <line
+     x1="357"
+     y1="440"
+     x2="622"
+     y2="440"
+     stroke="#fde047"
+     stroke-width="0.8"
+     id="line78" />
+  <text
+     x="367"
+     y="457"
+     font-size="9px"
+     fill="#713f12"
+     font-weight="bold"
+     text-anchor="start"
+     id="text79">Steps on drift detected:</text>
+  <text
+     x="367"
+     y="474"
+     font-size="8.5px"
+     fill="#854d0e"
+     text-anchor="start"
+     id="text80">1. Log trigger event → MLflow</text>
+  <text
+     x="367"
+     y="490"
+     font-size="8.5px"
+     fill="#854d0e"
+     text-anchor="start"
+     id="text81">2. Train 8 challengers (GBM sklearn)</text>
+  <text
+     x="367"
+     y="506"
+     font-size="8.5px"
+     fill="#854d0e"
+     text-anchor="start"
+     id="text82">using load_config() + get_data_source()</text>
+  <text
+     x="367"
+     y="522"
+     font-size="8.5px"
+     fill="#854d0e"
+     text-anchor="start"
+     id="text83">3. Compare challenger R² vs champion R²</text>
+  <text
+     x="367"
+     y="538"
+     font-size="8.5px"
+     fill="#854d0e"
+     text-anchor="start"
+     id="text84">4. Promote if ≥ champion + MIN_DELTA(0.0)</text>
+  <text
+     x="367"
+     y="554"
+     font-size="8.5px"
+     fill="#854d0e"
+     text-anchor="start"
+     id="text85">5. Archive otherwise</text>
+  <text
+     x="367"
+     y="570"
+     font-size="8.5px"
+     fill="#854d0e"
+     text-anchor="start"
+     id="text86">6. POST /reload → inference-api</text>
+  <line
+     x1="357"
+     y1="580"
+     x2="622"
+     y2="580"
+     stroke="#fde047"
+     stroke-width="0.8"
+     id="line86" />
+  <text
+     x="489"
+     y="596"
+     font-size="8.5px"
+     fill="#713f12"
+     text-anchor="middle"
+     id="text87">config-driven via MODEL_CONFIG YAML</text>
+  <text
+     x="489"
+     y="612"
+     font-size="8px"
+     fill="#92400e"
+     text-anchor="middle"
+     id="text88">env: CHALLENGER_MIN_IMPROVEMENT · INFERENCE_API_URL</text>
+  <!-- test-runner -->
+  <rect
+     x="772"
+     y="394"
+     width="603"
+     height="248"
+     rx="8"
+     fill="#ede9fe"
+     stroke="#c4b5fd"
+     stroke-width="1.5"
+     id="rect88" />
+  <text
+     x="1073"
+     y="415"
+     font-size="12px"
+     font-weight="bold"
+     fill="#2e1065"
+     text-anchor="middle"
+     id="text89">test-runner</text>
+  <text
+     x="1073"
+     y="431"
+     font-size="9px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text90">on-demand · docker compose run --rm test-runner</text>
+  <line
+     x1="782"
+     y1="440"
+     x2="1365"
+     y2="440"
+     stroke="#c4b5fd"
+     stroke-width="0.8"
+     id="line90" />
+  <rect
+     x="783"
+     y="447"
+     width="280"
+     height="73"
+     rx="4"
+     fill="#ddd6fe"
+     stroke="#a78bfa"
+     stroke-width="0.8"
+     id="rect90" />
+  <text
+     x="923"
+     y="463"
+     font-size="9px"
+     fill="#2e1065"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text91">test_data.py — Level 1</text>
+  <text
+     x="923"
+     y="478"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text92">CSV schema · 284 rows · 15 cols</text>
+  <text
+     x="923"
+     y="493"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text93">no nulls · both scenarios present</text>
+  <text
+     x="923"
+     y="512"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text94">feature ranges · additive consistency</text>
+  <rect
+     x="1075"
+     y="447"
+     width="280"
+     height="73"
+     rx="4"
+     fill="#ddd6fe"
+     stroke="#a78bfa"
+     stroke-width="0.8"
+     id="rect94" />
+  <text
+     x="1215"
+     y="463"
+     font-size="9px"
+     fill="#2e1065"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text95">test_model.py — Level 2</text>
+  <text
+     x="1215"
+     y="478"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text96">R² ≥ 0.70 · sMAPE &lt; 20% · CV stability</text>
+  <text
+     x="1215"
+     y="493"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text97">beats DummyRegressor · non-negative preds</text>
+  <text
+     x="1215"
+     y="512"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text98">MLflow registry · feature_ranking.json</text>
+  <rect
+     x="783"
+     y="528"
+     width="280"
+     height="73"
+     rx="4"
+     fill="#ddd6fe"
+     stroke="#a78bfa"
+     stroke-width="0.8"
+     id="rect98" />
+  <text
+     x="923"
+     y="544"
+     font-size="9px"
+     fill="#2e1065"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text99">test_api.py — Level 3</text>
+  <text
+     x="923"
+     y="559"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text100">HTTP 200/422 · all activities/workers</text>
+  <text
+     x="923"
+     y="574"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text101">all crop_rows · error handling</text>
+  <text
+     x="923"
+     y="593"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text102">latency SLA &lt; 500ms per prediction</text>
+  <rect
+     x="1075"
+     y="528"
+     width="280"
+     height="73"
+     rx="4"
+     fill="#ddd6fe"
+     stroke="#a78bfa"
+     stroke-width="0.8"
+     id="rect102" />
+  <text
+     x="1215"
+     y="544"
+     font-size="9px"
+     fill="#2e1065"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text103">test_drift.py — Level 4</text>
+  <text
+     x="1215"
+     y="559"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text104">unit: effect size · t-test · EWMA</text>
+  <text
+     x="1215"
+     y="574"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text105">integration: gradual/sudden drift</text>
+  <text
+     x="1215"
+     y="593"
+     font-size="8.5px"
+     fill="#4c1d95"
+     text-anchor="middle"
+     id="text106">drift recovery · threshold sensitivity</text>
+  <text
+     x="1073"
+     y="620"
+     font-size="8.5px"
+     fill="#5b21b6"
+     text-anchor="middle"
+     id="text107">QA results logged to: quality-assurance experiment in MLflow</text>
+  <text
+     x="1073"
+     y="634"
+     font-size="8.5px"
+     fill="#6d28d9"
+     text-anchor="middle"
+     id="text108">env gates: GATE_MIN_R2=0.70 · GATE_MAX_SMAPE=20% · GATE_MAX_LATENCY_MS=500</text>
+  <!-- ══════════════════════════════════════════════════════════════
+       CROSS-ROW ARROWS — 78px gap y=316–394
+       Row-2 boxes start at y=394; Row-1 boxes end at y=316
+       Sub-channels (10px apart): y=325 · 335 · 345 · 355 · 365
+  ══════════════════════════════════════════════════════════════ -->
+  <!-- ① test-runner → MLflow  (purple, y-channel=325) -->
+  <path
+     d="M 850 394 L 850 325 L 614 325 L 614 316"
+     stroke="#7C3AED"
+     stroke-width="1.5"
+     fill="none"
+     marker-end="url(#arr-p)"
+     id="path108" />
+  <!-- ② retrain-trigger → MLflow  (amber, y-channel=335) -->
+  <path
+     d="M 489 394 L 489 335 L 580 335 L 580 316"
+     stroke="#B45309"
+     stroke-width="1.5"
+     fill="none"
+     marker-end="url(#arr-y)"
+     id="path109" />
+  <!-- ③ drift-detector → MLflow  (orange, y-channel=345) -->
+  <path
+     d="M 185 394 L 185 345 L 545 345 L 545 316"
+     stroke="#D97706"
+     stroke-width="1.5"
+     fill="none"
+     marker-end="url(#arr-o)"
+     id="path110" />
+  <!-- ④ retrain-trigger → inference-api  POST /reload  (green, y-channel=355) -->
+  <path
+     d="M 400 394 L 400 355 L 310 355 L 310 316"
+     stroke="#16A34A"
+     stroke-width="1.5"
+     fill="none"
+     marker-end="url(#arr-g)"
+     id="path111" />
+  <!-- ⑤ test-runner → inference-api  HTTP tests  (purple dashed, y-channel=365) -->
+  <path
+     d="M 772 490 L 750 490 L 750 365 L 340 365 L 340 316"
+     stroke="#7C3AED"
+     stroke-width="1.5"
+     stroke-dasharray="4,3"
+     fill="none"
+     marker-end="url(#arr-p)"
+     id="path112" />
+  <!-- Channel labels — centered above each horizontal segment, staggered to avoid overlap -->
+  <text x="732" y="321" font-size="7.5" fill="#6D28D9" text-anchor="middle" id="text112">log QA → MLflow</text>
+  <text x="534" y="331" font-size="7.5" fill="#92400E" text-anchor="middle" id="text113">register challengers</text>
+  <text x="250" y="341" font-size="7.5" fill="#B45309" text-anchor="middle" id="text114">log drift → MLflow</text>
+  <text x="355" y="351" font-size="7.5" fill="#15803D" text-anchor="middle" id="text115">POST /reload</text>
+  <text x="545" y="361" font-size="7.5" fill="#6D28D9" text-anchor="middle" id="text116">HTTP tests</text>
+  <!-- ══════════════════════════════════════════════════════════════
+       EXTERNAL ARROWS  (user, start.sh)
+  ══════════════════════════════════════════════════════════════ -->
+  <!-- User → nginx  (left margin, vertical) -->
+  <line
+     x1="111"
+     y1="738"
+     x2="111"
+     y2="319"
+     stroke="#94A3B8"
+     stroke-width="1.5"
+     stroke-dasharray="5,3"
+     marker-end="url(#arr)"
+     id="line116" />
+  <text
+     x="-568"
+     y="82"
+     font-size="8px"
+     fill="#94a3b8"
+     text-anchor="middle"
+     transform="rotate(-90)"
+     id="text117">HTTP :80</text>
+  <!-- start.sh → model-trainer (bottom path) -->
+  <path
+     d="M 305 738 L 305 818 L 1073 818 L 1073 606"
+     stroke="#94A3B8"
+     stroke-width="1.5"
+     stroke-dasharray="5,3"
+     fill="none"
+     marker-end="url(#arr)"
+     id="path117" />
+  <text
+     x="700"
+     y="828"
+     font-size="8"
+     fill="#64748B"
+     text-anchor="middle"
+     id="text118">bash start.sh triggers full pipeline on first run</text>
+  <!-- ══════════════════════════════════════════════════════════════
+       INFRASTRUCTURE ROW  y=700
+  ══════════════════════════════════════════════════════════════ -->
+  <rect
+     x="25"
+     y="700"
+     width="210"
+     height="48"
+     rx="6"
+     fill="#D1FAE5"
+     stroke="#34D399"
+     stroke-width="1.5"
+     id="rect118" />
+  <text
+     x="130"
+     y="717"
+     font-size="10"
+     fill="#064E3B"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text119">mlflow-data (named vol)</text>
+  <text
+     x="130"
+     y="732"
+     font-size="8.5"
+     fill="#065F46"
+     text-anchor="middle"
+     id="text120">mlflow.db · artifacts/</text>
+  <text
+     x="130"
+     y="744"
+     font-size="8"
+     fill="#047857"
+     text-anchor="middle"
+     id="text121">persists across docker compose down</text>
+  <rect
+     x="248"
+     y="700"
+     width="210"
+     height="48"
+     rx="6"
+     fill="#D1FAE5"
+     stroke="#34D399"
+     stroke-width="1.5"
+     id="rect121" />
+  <text
+     x="353"
+     y="717"
+     font-size="10"
+     fill="#064E3B"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text122">./data (bind · read-only)</text>
+  <text
+     x="353"
+     y="732"
+     font-size="8.5"
+     fill="#065F46"
+     text-anchor="middle"
+     id="text123">simulation_all.csv · 284 rows</text>
+  <text
+     x="353"
+     y="744"
+     font-size="8"
+     fill="#047857"
+     text-anchor="middle"
+     id="text124">mounted into 5 services</text>
+  <rect
+     x="471"
+     y="700"
+     width="395"
+     height="48"
+     rx="6"
+     fill="#ECFDF5"
+     stroke="#6EE7B7"
+     stroke-width="1.5"
+     id="rect124" />
+  <text
+     x="668"
+     y="717"
+     font-size="10"
+     fill="#064E3B"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text125">configs/hri-harvesting.yaml  (MODEL_CONFIG)</text>
+  <text
+     x="668"
+     y="732"
+     font-size="8.5"
+     fill="#047857"
+     text-anchor="middle"
+     id="text126">scenarios · targets · feature_names · tournament_candidates · quality_gates</text>
+  <text
+     x="668"
+     y="744"
+     font-size="8"
+     fill="#059669"
+     text-anchor="middle"
+     id="text127">swap to iris-classifier.yaml → classification mode · no code changes needed</text>
+  <rect
+     x="879"
+     y="700"
+     width="496"
+     height="48"
+     rx="6"
+     fill="#F1F5F9"
+     stroke="#CBD5E1"
+     stroke-width="1.5"
+     id="rect127" />
+  <text
+     x="1127"
+     y="717"
+     font-size="10"
+     fill="#0F172A"
+     font-weight="bold"
+     text-anchor="middle"
+     id="text128">GitHub Actions CI/CD  (.github/workflows/)</text>
+  <text
+     x="1127"
+     y="732"
+     font-size="8.5"
+     fill="#334155"
+     text-anchor="middle"
+     id="text129">ci.yml: PR/push → build + train + test · cd.yml: push main → deploy</text>
+  <text
+     x="1127"
+     y="744"
+     font-size="8"
+     fill="#64748B"
+     text-anchor="middle"
+     id="text130">retrain.yml: Mon 03:00 UTC · runs-on: self-hosted · GATE_MIN_R2 as input</text>
+  <!-- ══════════════════════════════════════════════════════════════
+       CONTEXT ROW  y=760
+  ══════════════════════════════════════════════════════════════ -->
+  <rect
+     x="25"
+     y="760"
+     width="175"
+     height="50"
+     rx="6"
+     fill="#F1F5F9"
+     stroke="#CBD5E1"
+     stroke-width="1.5"
+     id="rect130" />
+  <text
+     x="112"
+     y="779"
+     font-size="10"
+     font-weight="bold"
+     fill="#0F172A"
+     text-anchor="middle"
+     id="text131">External User</text>
+  <text
+     x="112"
+     y="794"
+     font-size="8.5"
+     fill="#334155"
+     text-anchor="middle"
+     id="text132">curl · frontend · HTTP :80</text>
+  <text
+     x="112"
+     y="806"
+     font-size="8"
+     fill="#64748B"
+     text-anchor="middle"
+     id="text133">via nginx reverse proxy</text>
+  <rect
+     x="213"
+     y="760"
+     width="185"
+     height="50"
+     rx="6"
+     fill="#F1F5F9"
+     stroke="#CBD5E1"
+     stroke-width="1.5"
+     id="rect133" />
+  <text
+     x="305"
+     y="779"
+     font-size="10"
+     font-weight="bold"
+     fill="#0F172A"
+     text-anchor="middle"
+     id="text134">bash start.sh</text>
+  <text
+     x="305"
+     y="794"
+     font-size="8.5"
+     fill="#334155"
+     text-anchor="middle"
+     id="text135">build → mlflow → trainer</text>
+  <text
+     x="305"
+     y="806"
+     font-size="8.5"
+     fill="#334155"
+     text-anchor="middle"
+     id="text136">→ inference-api → nginx</text>
+  <rect
+     x="411"
+     y="760"
+     width="290"
+     height="50"
+     rx="6"
+     fill="#D1FAE5"
+     stroke="#34D399"
+     stroke-width="1.5"
+     id="rect136" />
+  <text
+     x="556"
+     y="779"
+     font-size="10"
+     font-weight="bold"
+     fill="#064E3B"
+     text-anchor="middle"
+     id="text137">Security (P0 hardening)</text>
+  <text
+     x="556"
+     y="794"
+     font-size="8.5"
+     fill="#065F46"
+     text-anchor="middle"
+     id="text138">127.0.0.1 binding · CORS_ORIGINS env var</text>
+  <text
+     x="556"
+     y="806"
+     font-size="8.5"
+     fill="#047857"
+     text-anchor="middle"
+     id="text139">chmod 700 mlflow.db · 755 artifacts/</text>
+  <rect
+     x="714"
+     y="760"
+     width="255"
+     height="50"
+     rx="6"
+     fill="#FEF3C7"
+     stroke="#FCD34D"
+     stroke-width="1.5"
+     id="rect139" />
+  <text
+     x="841"
+     y="779"
+     font-size="10"
+     font-weight="bold"
+     fill="#78350F"
+     text-anchor="middle"
+     id="text140">Quality Gates (3 layers)</text>
+  <text
+     x="841"
+     y="794"
+     font-size="8.5"
+     fill="#92400E"
+     text-anchor="middle"
+     id="text141">Training: R² ≥ 0.70 · sMAPE &lt; 20%</text>
+  <text
+     x="841"
+     y="806"
+     font-size="8.5"
+     fill="#92400E"
+     text-anchor="middle"
+     id="text142">Test suite · Drift monitoring</text>
+  <rect
+     x="982"
+     y="760"
+     width="393"
+     height="50"
+     rx="6"
+     fill="#ECFDF5"
+     stroke="#6EE7B7"
+     stroke-width="1.5"
+     id="rect142" />
+  <text
+     x="1178"
+     y="779"
+     font-size="10"
+     font-weight="bold"
+     fill="#064E3B"
+     text-anchor="middle"
+     id="text143">Generic Framework (mlops_common)</text>
+  <text
+     x="1178"
+     y="794"
+     font-size="8.5"
+     fill="#065F46"
+     text-anchor="middle"
+     id="text144">add new dataset: new YAML + optional DataSource class</text>
+  <text
+     x="1178"
+     y="806"
+     font-size="8.5"
+     fill="#047857"
+     text-anchor="middle"
+     id="text145">add new algorithm: new ModelStrategy in models/</text>
+  <!-- ══════════════════════════════════════════════════════════════
+       LEGEND — right side of gap (x>860, clear of all arrows)
+  ══════════════════════════════════════════════════════════════ -->
+  <rect
+     x="1185"
+     y="318"
+     width="185"
+     height="68"
+     rx="4"
+     fill="#FFFFFF"
+     stroke="#E2E8F0"
+     stroke-width="1"
+     id="rect145" />
+  <text
+     x="1277"
+     y="330"
+     font-size="8"
+     font-weight="bold"
+     fill="#0F172A"
+     text-anchor="middle"
+     id="text146">Arrow colors</text>
+  <rect x="1191" y="335" width="8" height="8" rx="1" fill="#2563EB" id="rect146" />
+  <text x="1202" y="342" font-size="7.5" fill="#1D4ED8" id="text147">register / load</text>
+  <rect x="1277" y="335" width="8" height="8" rx="1" fill="#16A34A" id="rect147" />
+  <text x="1288" y="342" font-size="7.5" fill="#15803D" id="text148">POST /reload</text>
+  <rect x="1191" y="348" width="8" height="8" rx="1" fill="#D97706" id="rect148" />
+  <text x="1202" y="355" font-size="7.5" fill="#B45309" id="text149">log metrics</text>
+  <rect x="1277" y="348" width="8" height="8" rx="1" fill="#7C3AED" id="rect149" />
+  <text x="1288" y="355" font-size="7.5" fill="#6D28D9" id="text150">test runner</text>
+  <rect x="1191" y="361" width="8" height="8" rx="1" fill="#DC2626" id="rect150" />
+  <text x="1202" y="368" font-size="7.5" fill="#B91C1C" id="text151">load from registry</text>
+  <rect x="1277" y="361" width="8" height="8" rx="1" fill="#2563EB" stroke="none" id="rect151" />
+  <line x1="1277" y1="367" x2="1285" y2="367" stroke="#2563EB" stroke-dasharray="2,1" stroke-width="1.5" id="line_legend" />
+  <text x="1288" y="368" font-size="7.5" fill="#1D4ED8" id="text152">proxy route</text>
+</svg>

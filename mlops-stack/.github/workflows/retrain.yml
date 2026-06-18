@@ -57,6 +57,7 @@ jobs:
             -e INFERENCE_API_URL=http://inference-api:8000 \
             -e GATE_MIN_R2=${{ github.event.inputs.min_r2 || '0.70' }} \
             -e GATE_MAX_SMAPE=${{ github.event.inputs.max_smape || '20.0' }} \
+            -e API_KEY=${{ secrets.API_KEY }} \
             test-runner
 
       # Recargar el modelo en la API sin reiniciar el contenedor
@@ -64,6 +65,7 @@ jobs:
         if: success()
         run: |
           curl -sf -X POST http://localhost:8000/reload \
+            -H "X-API-Key: ${{ secrets.API_KEY }}" \
             && echo "Model reloaded in inference-api ✓" \
             || echo "Reload failed — inference-api may need restart"
 

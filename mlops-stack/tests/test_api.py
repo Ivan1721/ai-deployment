@@ -6,6 +6,9 @@ import urllib.request, urllib.error
 
 API_URL     = os.environ.get("INFERENCE_API_URL", "http://host.docker.internal:8000")
 MAX_LATENCY = float(os.environ.get("GATE_MAX_LATENCY_MS", "500"))
+API_KEY     = os.environ.get("API_KEY", "")
+
+_AUTH_HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
 
 # Valid sample requests
 VALID_HUMAN_ONLY = {
@@ -24,8 +27,9 @@ RESPONSE_KEYS = {
 
 
 def _get(path: str):
+    req = urllib.request.Request(f"{API_URL}{path}", headers=_AUTH_HEADERS)
     try:
-        with urllib.request.urlopen(f"{API_URL}{path}", timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=10) as r:
             return r.status, json.loads(r.read())
     except urllib.error.HTTPError as e:
         return e.code, {}
@@ -37,7 +41,7 @@ def _post(path: str, body: dict):
     data = json.dumps(body).encode()
     req  = urllib.request.Request(
         f"{API_URL}{path}", data=data,
-        headers={"Content-Type": "application/json"}, method="POST",
+        headers={"Content-Type": "application/json", **_AUTH_HEADERS}, method="POST",
     )
     t0 = time.perf_counter()
     try:

@@ -1,11 +1,7 @@
 # .github/workflows/ci.yml
 #
-# CAMBIO vs versión anterior:
-# - runs-on: self-hosted  (antes: ubuntu-latest)
-# - Sin GHCR, sin push de imágenes
-# - El runner tiene acceso directo al socket Docker del host
-# - Las URLs son internas (http://mlflow:5001) porque todos
-#   los contenedores comparten mlops-net en la misma máquina
+# Triggers on PR to main/develop and push to develop.
+# Runs on self-hosted runner (shares Docker socket with host).
 
 name: CI — Build & Test
 
@@ -49,6 +45,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── Pull dataset from DVC remote ───────────────────────────────────
+      - name: Pull data with DVC
+        working-directory: mlops-stack
+        run: dvc pull
+
       # ── Construir imágenes (usa cache local del host) ──────────────────
       - name: Build images
         working-directory: mlops-stack
@@ -80,14 +81,13 @@ jobs:
           echo "inference-api ready ✓"
 
       # ── Correr suite QA completa ───────────────────────────────────────
-      # En self-hosted, mlflow e inference-api son alcanzables por nombre
-      # porque el runner y los contenedores comparten la red del host.
       - name: Run QA suite
         working-directory: mlops-stack
         run: |
           docker compose run --rm \
             -e MLFLOW_TRACKING_URI=http://mlflow:5001 \
             -e INFERENCE_API_URL=http://inference-api:8000 \
+            -e API_KEY=${{ secrets.API_KEY }} \
             test-runner
 
       # ── Limpiar contenedores CI (NO los volúmenes — MLFlow persiste) ──
