@@ -12,6 +12,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 
 from .base import ModelStrategy
+from .custom_regressor import KernelWeightedRegressor
 
 
 class RandomForestRegressorStrategy(ModelStrategy):
@@ -22,3 +23,15 @@ class RandomForestRegressorStrategy(ModelStrategy):
 class LinearRegressionStrategy(ModelStrategy):
     def build(self, params: Dict[str, Any]):
         return LinearRegression(**params)
+
+
+class KernelWeightedRegressorStrategy(ModelStrategy):
+    """Envuelve KernelWeightedRegressor (Nadaraya-Watson) en la abstracción ModelStrategy.
+
+    fit / predict / cv_score se heredan de ModelStrategy sin cambios porque
+    KernelWeightedRegressor sigue la API sklearn (BaseEstimator + RegressorMixin).
+    predict_proba lanza NotImplementedError por defecto — correcto para regresión.
+    """
+
+    def build(self, params: Dict[str, Any]):
+        return KernelWeightedRegressor(**params)

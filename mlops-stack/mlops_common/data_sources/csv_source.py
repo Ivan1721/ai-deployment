@@ -10,6 +10,7 @@ contrario, como clasificación (sus valores únicos se usan como target_names).
 import pandas as pd
 
 from .base import DataSource, DatasetBundle
+from ..storage import get_storage_backend
 
 _MAX_CLASSES_HEURISTIC = 20
 
@@ -18,9 +19,11 @@ class CsvDataSource(DataSource):
     def __init__(self, cfg):
         self.path = cfg.path
         self.target_column = cfg.target_column
+        self._storage = get_storage_backend(cfg.storage)
 
     def load(self) -> DatasetBundle:
-        df = pd.read_csv(self.path)
+        local_path = self._storage.resolve(self.path)
+        df = pd.read_csv(local_path)
         if self.target_column not in df.columns:
             raise ValueError(f"target_column '{self.target_column}' not found in {self.path}")
 

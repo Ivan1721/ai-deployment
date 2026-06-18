@@ -13,6 +13,7 @@ networks:
 volumes:
   mlflow-data:   # persiste entre deploys y reboots
   keycloak-data: # SECURITY FIX P0-1: Datos persistentes de Keycloak
+  dvc-cache:     # caché local de DVC (compartida entre model-trainer, drift-detector y test-runner)
 
 services:
 
@@ -42,8 +43,15 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5001
       MLFLOW_ARTIFACT_ROOT: /mlflow/artifacts
       MODEL_CONFIG: /app/configs/iris-classifier.yaml
+      DVC_CACHE_DIR: /dvc-cache
+      # Credenciales de almacenamiento — dejar vacías para el caso Iris (git_local)
+      # Definir en el host antes de `docker compose up` según el backend activo:
+      #   Azure:    export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;..."
+      #   GDrive:   montar Service Account como volumen (ver storage/gdrive_backend.py)
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
     volumes:
       - mlflow-data:/mlflow
+      - dvc-cache:/dvc-cache
     depends_on:
       mlflow:
         condition: service_healthy
@@ -96,8 +104,11 @@ services:
       PERF_DRIFT_EFFECT_SIZE:    "0.05"
       PERF_DRIFT_P_VALUE:        "0.05"
       PERF_DRIFT_CONSECUTIVE:    "2"
+      DVC_CACHE_DIR: /dvc-cache
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
     volumes:
       - mlflow-data:/mlflow
+      - dvc-cache:/dvc-cache
     depends_on:
       mlflow:
         condition: service_healthy
@@ -119,8 +130,11 @@ services:
       GATE_MIN_ACCURACY:   "0.90"
       GATE_MIN_F1:         "0.90"
       GATE_MAX_LATENCY_MS: "500"
+      DVC_CACHE_DIR: /dvc-cache
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
     volumes:
       - mlflow-data:/mlflow
+      - dvc-cache:/dvc-cache
     depends_on:
       mlflow:
         condition: service_healthy

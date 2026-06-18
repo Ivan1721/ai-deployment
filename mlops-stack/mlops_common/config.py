@@ -18,11 +18,24 @@ import yaml
 
 
 @dataclasses.dataclass
+class StorageConfig:
+    """Configuración del backend de almacenamiento para fuentes de datos basadas en archivo."""
+    backend: str = "git_local"              # git_local | dvc | azure | gdrive | encrypted_local
+    remote: Optional[str] = None           # nombre del remote DVC / gdrive / encrypted_local
+    rev: Optional[str] = None             # tag/commit DVC para reproducibilidad
+    auto_pull: bool = True                 # DVC: pull automático si no está en caché
+    container: Optional[str] = None       # Azure: nombre del contenedor Blob
+    connection_string: Optional[str] = None  # Azure: connection string (preferir env var)
+    encrypted_path: Optional[str] = None  # encrypted_local: ruta del volumen montado
+
+
+@dataclasses.dataclass
 class DataSourceConfig:
     type: str
     name: Optional[str] = None
     path: Optional[str] = None
     target_column: Optional[str] = None
+    storage: StorageConfig = dataclasses.field(default_factory=StorageConfig)
 
 
 @dataclasses.dataclass
@@ -88,11 +101,22 @@ def load_config(path: Optional[str] = None) -> ExperimentConfig:
         raw = yaml.safe_load(f)
 
     ds_raw = raw["data_source"]
+    storage_raw = ds_raw.get("storage", {})
+    storage = StorageConfig(
+        backend=storage_raw.get("backend", "git_local"),
+        remote=storage_raw.get("remote"),
+        rev=storage_raw.get("rev"),
+        auto_pull=storage_raw.get("auto_pull", True),
+        container=storage_raw.get("container"),
+        connection_string=storage_raw.get("connection_string"),
+        encrypted_path=storage_raw.get("encrypted_path"),
+    )
     data_source = DataSourceConfig(
         type=ds_raw["type"],
         name=ds_raw.get("name"),
         path=ds_raw.get("path"),
         target_column=ds_raw.get("target_column"),
+        storage=storage,
     )
 
     model = ModelConfig(

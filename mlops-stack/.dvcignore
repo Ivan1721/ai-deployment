@@ -1,0 +1,26 @@
+# .dvcignore — equivalente al .gitignore para DVC
+# DVC no incluirá estos paths en el hash del workspace ni los trackeará.
+
+# Control de versiones
+.git
+
+# Python
+__pycache__
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# Logs y artefactos temporales
+*.log
+*.tmp
+
+# Volúmenes y datos de servicios (gestionados por Docker, no por DVC)
+mlflow-data/
+keycloak-data/
+
+# Certificados y secretos
+nginx/certs/
+*.pem
+*.key
+*.crt

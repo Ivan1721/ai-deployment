@@ -1,12 +1,17 @@
 from .base import ModelStrategy
 from .classification import LogisticRegressionStrategy, RandomForestClassifierStrategy
-from .regression import LinearRegressionStrategy, RandomForestRegressorStrategy
+from .regression import (
+    LinearRegressionStrategy,
+    RandomForestRegressorStrategy,
+    KernelWeightedRegressorStrategy,
+)
 
 MODEL_REGISTRY = {
-    "random_forest_classifier": RandomForestClassifierStrategy,
-    "logistic_regression": LogisticRegressionStrategy,
-    "random_forest_regressor": RandomForestRegressorStrategy,
-    "linear_regression": LinearRegressionStrategy,
+    "random_forest_classifier":   RandomForestClassifierStrategy,
+    "logistic_regression":        LogisticRegressionStrategy,
+    "random_forest_regressor":    RandomForestRegressorStrategy,
+    "linear_regression":          LinearRegressionStrategy,
+    "kernel_weighted_regressor":  KernelWeightedRegressorStrategy,
 }
 
 

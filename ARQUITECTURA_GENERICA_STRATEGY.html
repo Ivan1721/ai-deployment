@@ -624,5 +624,517 @@ sigue sin cambios porque solo interactúa con <code>ModelStrategy</code>, nunca
 con la librería subyacente directamente.
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<h2>8. Caso completo: algoritmo ad-hoc + DVC + despliegue</h2>
+
+<p>Esta sección integra en un único recorrido los tres pilares anteriores:
+un <strong>regresor personalizado implementado 100% en NumPy</strong>,
+datos almacenados en <strong>DVC</strong> (con soporte para Azure Blob Storage,
+Google Drive y carpeta local encriptada), y el ciclo completo de
+<strong>integración continua → despliegue en producción</strong>,
+distinguiendo qué pasos son automáticos y cuáles requieren intervención manual.</p>
+
+<p>Caso de uso de ejemplo: predicción de precio de viviendas a partir de un
+CSV almacenado en la nube, usando el regresor Nadaraya-Watson.</p>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<h3>8.1 La nueva abstracción: <code>StorageBackend</code></h3>
+
+<p>Para desacoplar <em>cómo se obtiene un archivo</em> de <em>cómo se carga
+como dataset</em>, se introduce una segunda jerarquía Strategy+Adapter:
+<code>StorageBackend</code>, en <code>mlops_common/storage/</code>.</p>
+
+<pre><code># mlops_common/storage/base.py
+from abc import ABC, abstractmethod
+from pathlib import Path
+
+class StorageBackend(ABC):
+    """Materializa un archivo de datos en disco local.
+    resolve(path) -> Path: descarga / verifica y devuelve ruta local.
+    """
+    @abstractmethod
+    def resolve(self, path: str) -> Path: ...</code></pre>
+
+<p>Las implementaciones concretas son Adapters que traducen APIs heterogéneas
+al mismo contrato:</p>
+
+<table>
+  <tr>
+    <th>Clave YAML</th><th>Clase</th><th>Mecanismo</th><th>Dependencia extra</th>
+  </tr>
+  <tr>
+    <td><code>git_local</code></td>
+    <td><code>GitLocalBackend</code></td>
+    <td>No-op; verifica que el archivo exista en disco (default)</td>
+    <td>Ninguna</td>
+  </tr>
+  <tr>
+    <td><code>dvc</code></td>
+    <td><code>DvcBackend</code></td>
+    <td><code>dvc.api.open()</code> — cubre S3, GCS, SSH, local DVC remote</td>
+    <td><code>dvc</code></td>
+  </tr>
+  <tr>
+    <td><code>azure</code></td>
+    <td><code>AzureBlobBackend</code></td>
+    <td>SDK <code>azure-storage-blob</code> directo; soporta Managed Identity</td>
+    <td><code>azure-storage-blob</code>, <code>azure-identity</code></td>
+  </tr>
+  <tr>
+    <td><code>gdrive</code></td>
+    <td><code>GoogleDriveBackend</code></td>
+    <td>DVC remote <code>gdrive://</code>; OAuth gestionado por DVC</td>
+    <td><code>dvc</code>, <code>dvc-gdrive</code></td>
+  </tr>
+  <tr>
+    <td><code>encrypted_local</code></td>
+    <td><code>EncryptedLocalBackend</code></td>
+    <td>DVC remote local sobre volumen encriptado (LUKS / VeraCrypt)</td>
+    <td><code>dvc</code></td>
+  </tr>
+</table>
+
+<p><code>CsvDataSource</code> recibe el backend como dependencia inyectada y
+lo llama <em>antes</em> de <code>pd.read_csv</code>:</p>
+
+<pre><code># mlops_common/data_sources/csv_source.py  (fragmento modificado)
+from ..storage import get_storage_backend
+
+class CsvDataSource(DataSource):
+    def __init__(self, cfg):
+        self.path = cfg.path
+        self.target_column = cfg.target_column
+        self._storage = get_storage_backend(cfg.storage)   # ← única adición
+
+    def load(self) -> DatasetBundle:
+        local_path = self._storage.resolve(self.path)      # ← única adición
+        df = pd.read_csv(local_path)
+        ...</code></pre>
+
+<p>El resto del stack (<code>train.py</code>, <code>app.py</code>,
+<code>detector.py</code>, <code>retrain_trigger.py</code>) no cambia:
+solo llaman a <code>get_data_source(cfg.data_source).load()</code> como antes.</p>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<h3>8.2 Algoritmo personalizado: <code>KernelWeightedRegressor</code></h3>
+
+<p>El regresor Nadaraya-Watson predice como promedio ponderado de los targets
+de entrenamiento, donde el peso de cada vecino es proporcional a su similitud
+con el punto de consulta, medida por un kernel Gaussiano:</p>
+
+<div style="background:#f0f4f8;border-left:4px solid #2c7be5;padding:10px 16px;margin:12px 0;font-style:italic">
+  ŷ(x) = Σ<sub>i</sub> K(x, xᵢ) · yᵢ / Σ<sub>i</sub> K(x, xᵢ) &nbsp;&nbsp; donde &nbsp;&nbsp;
+  K(x, xᵢ) = exp(−‖x − xᵢ‖² / 2h²)
+</div>
+
+<p>No existe en scikit-learn ni en ninguna librería estándar de ML en Python.
+Hereda <code>BaseEstimator</code> + <code>RegressorMixin</code> para que
+<code>cross_val_score</code> y <code>mlflow.sklearn.log_model</code> funcionen
+sin ningún override adicional.</p>
+
+<pre><code># mlops_common/models/custom_regressor.py
+import numpy as np
+from sklearn.base import BaseEstimator, RegressorMixin
+
+class KernelWeightedRegressor(BaseEstimator, RegressorMixin):
+    """Regresor Nadaraya-Watson con kernel Gaussiano."""
+
+    def __init__(self, bandwidth: float = 1.0):
+        self.bandwidth = bandwidth
+
+    def fit(self, X, y):
+        self.X_train_ = np.asarray(X, dtype=float)
+        self.y_train_ = np.asarray(y, dtype=float)
+        return self
+
+    def predict(self, X):
+        X = np.asarray(X, dtype=float)
+        diff    = X[:, None, :] - self.X_train_[None, :, :]       # (n_test, n_train, p)
+        sq_dist = (diff ** 2).sum(axis=2)                          # (n_test, n_train)
+        weights = np.exp(-sq_dist / (2.0 * self.bandwidth ** 2))   # kernel Gaussiano
+        denom   = weights.sum(axis=1, keepdims=True)
+        denom   = np.where(denom == 0, 1e-10, denom)               # evitar div/0
+        return (weights / denom * self.y_train_[None, :]).sum(axis=1)</code></pre>
+
+<p>La estrategia que lo envuelve solo necesita implementar <code>build()</code>;
+<code>fit</code>, <code>predict</code> y <code>cv_score</code> se heredan:</p>
+
+<pre><code># mlops_common/models/regression.py
+from .custom_regressor import KernelWeightedRegressor
+
+class KernelWeightedRegressorStrategy(ModelStrategy):
+    def build(self, params):
+        return KernelWeightedRegressor(**params)
+    # fit / predict / cv_score: heredados — KernelWeightedRegressor es sklearn-compatible
+    # predict_proba: NotImplementedError por defecto — correcto para regresión
+
+# mlops_common/models/__init__.py
+MODEL_REGISTRY = {
+    ...,
+    "kernel_weighted_regressor": KernelWeightedRegressorStrategy,
+}</code></pre>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<h3>8.3 Configuración YAML del caso de uso</h3>
+
+<p>Un único archivo YAML conecta el algoritmo, la fuente de datos y el
+backend de almacenamiento. A continuación se muestran las tres variantes
+de backend para el mismo caso de uso:</p>
+
+<pre><code># configs/custom-regressor-dvc.yaml
+name: housing-kernel-regressor
+problem_type: regression
+
+data_source:
+  type: csv
+  path: data/housing.csv
+  target_column: price
+
+  # ── Variante A: Azure Blob Storage (SDK directo) ──────────────────
+  storage:
+    backend: azure
+    container: mlops-datasets
+    # connection_string: "..."  ← preferir AZURE_STORAGE_CONNECTION_STRING (env var)
+
+  # ── Variante B: Google Drive vía DVC ─────────────────────────────
+  # storage:
+  #   backend: gdrive
+  #   remote: gdrive            # dvc remote add gdrive gdrive://&lt;folder_id&gt;
+
+  # ── Variante C: Carpeta local encriptada (LUKS / VeraCrypt) ───────
+  # storage:
+  #   backend: encrypted_local
+  #   remote: local_enc         # dvc remote add local_enc /mnt/secure/dvc-cache
+  #   encrypted_path: /mnt/secure  # se verifica que esté montado en startup
+
+model:
+  family: kernel_weighted_regressor
+  params:
+    bandwidth: 0.8
+
+training:
+  test_size: 0.20
+  stratify: false    # regresión: sin estratificación
+  cv_folds: 5
+
+mlflow:
+  experiment_name: housing-kernel-production
+  registered_model_name: housing-kernel-regressor
+
+quality_gates:
+  min_r2: 0.70
+  max_mae: 60000.0
+
+retrain:
+  challenger_min_improvement: 0.01</code></pre>
+
+<div class="note">
+Cambiar de Azure a Google Drive o a carpeta encriptada es una edición de
+3 líneas en el YAML. Ningún servicio del stack ni ningún test necesita
+modificarse.
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<h3>8.4 Setup inicial del proyecto (pasos manuales — una sola vez)</h3>
+
+<p>Estos pasos se realizan en la máquina del desarrollador, antes de hacer
+el primer <code>git push</code>. El script <code>init_project.py</code>
+automatiza la mayoría; se documentan aquí para tener visibilidad completa.</p>
+
+<h4>Opción A — Azure Blob Storage</h4>
+<pre><code># 1. Inicializar DVC en el repo (una sola vez por proyecto)
+dvc init
+git add .dvc .dvcignore
+git commit -m "chore: dvc init"
+
+# 2. Configurar el remote Azure
+dvc remote add -d azureremote azure://mlops-datasets
+dvc remote modify azureremote connection_string \
+    "${AZURE_STORAGE_CONNECTION_STRING}"
+git add .dvc/config
+
+# 3. Añadir el archivo de datos al tracking de DVC
+#    (DVC genera housing.csv.dvc y actualiza data/.gitignore)
+dvc add data/housing.csv
+git add data/housing.csv.dvc data/.gitignore
+
+# 4. Subir datos al remote y confirmar cambios de config
+dvc push --remote azureremote
+git commit -m "feat: track housing.csv con DVC (remote Azure)"
+git push</code></pre>
+
+<h4>Opción B — Google Drive</h4>
+<pre><code># 2. Configurar remote Google Drive
+dvc remote add -d gdrive gdrive://&lt;FOLDER_ID&gt;
+# Para CI/Docker sin ventana de browser (Service Account):
+dvc remote modify gdrive gdrive_use_service_account true
+dvc remote modify gdrive gdrive_service_account_json_file_path \
+    /run/secrets/gdrive-sa.json
+# Los pasos 1, 3 y 4 son idénticos a la Opción A.</code></pre>
+
+<h4>Opción C — Carpeta local encriptada</h4>
+<pre><code># 2. Crear y montar el volumen encriptado (ej. con VeraCrypt o LUKS),
+#    luego configurar el remote DVC apuntando a él:
+dvc remote add -d local_enc /mnt/secure/dvc-cache
+# En docker-compose.yml, montar el volumen desencriptado:
+#   volumes:
+#     - /mnt/secure:/mnt/secure:ro
+# Los pasos 1, 3 y 4 son idénticos a la Opción A.</code></pre>
+
+<p>Alternativa automatizada (interactiva):</p>
+<pre><code>python init_project.py --config configs/custom-regressor-dvc.yaml</code></pre>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<h3>8.5 Flujo de integración continua (automático)</h3>
+
+<p>En cada Pull Request o push a <code>develop</code>/<code>main</code>,
+el runner CI ejecuta los siguientes pasos <strong>sin intervención humana</strong>:</p>
+
+<table>
+  <tr><th>#</th><th>Paso</th><th>Comando / acción</th></tr>
+  <tr>
+    <td>1</td>
+    <td>Validar sintaxis compose</td>
+    <td><code>docker compose config --quiet</code></td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>Lint Python</td>
+    <td><code>flake8 ... --max-line-length=110</code></td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Construir imágenes</td>
+    <td><code>docker compose build --parallel</code></td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>Levantar MLflow</td>
+    <td><code>docker compose up -d mlflow</code> + esperar healthcheck</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><strong>Pull de datos desde DVC</strong></td>
+    <td><code>dvc pull --remote azureremote</code> (con credencial inyectada
+        como secreto CI: <code>AZURE_STORAGE_CONNECTION_STRING</code>)</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>Entrenar modelo</td>
+    <td><code>docker compose run --rm model-trainer</code></td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>Levantar API</td>
+    <td><code>docker compose up -d inference-api</code> + healthcheck</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td>Suite QA (4 niveles)</td>
+    <td><code>docker compose run --rm test-runner</code></td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td>Reportar resultado</td>
+    <td>El runner marca el PR como ✅ o ❌ según el exit code del test-runner</td>
+  </tr>
+</table>
+
+<p>El paso 5 es la única diferencia respecto al caso Iris:
+<code>dvc pull</code> descarga <code>data/housing.csv</code> al workspace del
+runner antes de que el contenedor <code>model-trainer</code> lo lea.
+Dentro del contenedor, <code>AzureBlobBackend.resolve()</code> descarga
+directamente desde Azure sin necesitar el workspace DVC local.</p>
+
+<div class="note">
+<strong>Secretos CI necesarios</strong> (configurar una sola vez en
+GitHub Actions → Settings → Secrets):
+<ul style="margin:6px 0 0 0">
+  <li><code>AZURE_STORAGE_CONNECTION_STRING</code> — para el paso 5 (dvc pull)
+      y para los contenedores (pasado como env var en docker-compose.yml).</li>
+  <li><code>GDRIVE_CREDENTIALS_DATA</code> — si se usa Google Drive (base64 del SA JSON).</li>
+</ul>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<h3>8.6 Despliegue en producción</h3>
+
+<h4>Pasos manuales (una sola vez por servidor)</h4>
+
+<ol>
+  <li><strong>Provisionar el servidor</strong>: instalar Docker, docker compose plugin, git, DVC.</li>
+  <li><strong>Clonar el repositorio</strong>:
+    <pre><code>git clone &lt;repo-url&gt; /opt/mlops-stack
+cd /opt/mlops-stack/mlops-stack</code></pre>
+  </li>
+  <li><strong>Configurar credenciales de almacenamiento</strong>:
+    <pre><code># Azure: añadir al /etc/environment o al .env del servicio systemd
+AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;..."
+
+# Google Drive: copiar el Service Account JSON
+mkdir -p /run/secrets
+cp gdrive-sa.json /run/secrets/gdrive-sa.json
+
+# Carpeta encriptada: montar el volumen ANTES de iniciar el stack
+cryptsetup open /dev/sdb secure_vol
+mount /dev/mapper/secure_vol /mnt/secure</code></pre>
+  </li>
+  <li><strong>Generar certificados TLS</strong>:
+    <pre><code>bash generate-certs.sh &lt;dominio&gt;</code></pre>
+  </li>
+  <li><strong>Configurar Keycloak</strong> (OIDC auth):
+    <pre><code>docker compose up -d keycloak
+bash setup-keycloak.sh
+# Copiar el client_secret impreso al docker-compose.yml</code></pre>
+  </li>
+  <li><strong>Primera carga de datos desde DVC</strong>:
+    <pre><code>dvc pull --remote azureremote</code></pre>
+  </li>
+  <li><strong>Primer arranque completo</strong>:
+    <pre><code>bash start.sh</code></pre>
+  </li>
+</ol>
+
+<h4>Despliegues subsiguientes (automático vía CD)</h4>
+
+<p>En cada push a <code>main</code> que pase el CI, el workflow
+<code>cd.yml</code> ejecuta automáticamente:</p>
+
+<table>
+  <tr><th>#</th><th>Paso</th><th>Comando</th></tr>
+  <tr>
+    <td>1</td>
+    <td>Sincronizar código</td>
+    <td><code>rsync</code> repo local → <code>/opt/mlops-stack</code></td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>Pull de datos actualizados</td>
+    <td><code>dvc pull --remote azureremote</code></td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Rebuild de imágenes</td>
+    <td><code>docker compose build --parallel</code></td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>Zero-downtime update API</td>
+    <td><code>docker compose up -d --no-deps inference-api</code> + esperar healthcheck</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>Update restantes servicios</td>
+    <td><code>docker compose up -d drift-detector nginx</code></td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>Reentrenar si no hay modelo Production</td>
+    <td><code>docker compose run --rm model-trainer</code> (condicional)</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>QA post-deploy</td>
+    <td><code>docker compose run --rm test-runner</code></td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td>Hot-reload del modelo</td>
+    <td><code>curl -X POST http://localhost:8000/reload</code></td>
+  </tr>
+</table>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<h3>8.7 Resumen: pasos manuales vs. automáticos</h3>
+
+<table>
+  <tr>
+    <th>Paso</th>
+    <th>¿Quién lo hace?</th>
+    <th>¿Cuándo?</th>
+  </tr>
+  <tr>
+    <td>Implementar <code>KernelWeightedRegressor</code></td>
+    <td>Desarrollador</td>
+    <td>Una vez, al crear el algoritmo</td>
+  </tr>
+  <tr>
+    <td>Registrar en <code>MODEL_REGISTRY</code></td>
+    <td>Desarrollador</td>
+    <td>Una vez, junto al algoritmo</td>
+  </tr>
+  <tr>
+    <td>Crear <code>configs/custom-regressor-dvc.yaml</code></td>
+    <td>Desarrollador / MLE</td>
+    <td>Una vez por caso de uso</td>
+  </tr>
+  <tr>
+    <td><code>dvc init</code> + configurar remote</td>
+    <td>Desarrollador (<code>init_project.py</code>)</td>
+    <td>Una vez por proyecto</td>
+  </tr>
+  <tr>
+    <td><code>dvc add data/housing.csv</code> + <code>dvc push</code></td>
+    <td>Desarrollador / Data Engineer</td>
+    <td>Cada vez que cambian los datos</td>
+  </tr>
+  <tr>
+    <td>Configurar secretos CI (Azure/GDrive)</td>
+    <td>DevOps / Admin</td>
+    <td>Una vez por entorno (staging, prod)</td>
+  </tr>
+  <tr>
+    <td>Provisionar servidor, certs TLS, Keycloak</td>
+    <td>DevOps / Admin</td>
+    <td>Una vez por entorno de producción</td>
+  </tr>
+  <tr style="background:#f0f7f0">
+    <td>Build, test, deploy (CI/CD)</td>
+    <td><strong>Automático</strong> — GitHub Actions</td>
+    <td>En cada PR / push a main</td>
+  </tr>
+  <tr style="background:#f0f7f0">
+    <td>Pull de datos (<code>dvc pull</code>)</td>
+    <td><strong>Automático</strong> — CI runner</td>
+    <td>En cada ejecución del pipeline</td>
+  </tr>
+  <tr style="background:#f0f7f0">
+    <td>Train → Register → Promote modelo</td>
+    <td><strong>Automático</strong> — model-trainer</td>
+    <td>En CI y en el cron semanal</td>
+  </tr>
+  <tr style="background:#f0f7f0">
+    <td>Zero-downtime deploy + hot-reload</td>
+    <td><strong>Automático</strong> — cd.yml</td>
+    <td>En cada push a main</td>
+  </tr>
+  <tr style="background:#f0f7f0">
+    <td>Detección de drift + reentrenamiento</td>
+    <td><strong>Automático</strong> — drift-detector loop</td>
+    <td>Cada 30 s (configurable)</td>
+  </tr>
+  <tr style="background:#f0f7f0">
+    <td>Champion/challenger + promoción</td>
+    <td><strong>Automático</strong> — retrain_trigger</td>
+    <td>Al detectar drift en N ventanas</td>
+  </tr>
+</table>
+
+<div class="note">
+<strong>Principio de diseño clave</strong>: todo lo que está por debajo de
+<code>StorageBackend</code> y <code>ModelStrategy</code> —
+<code>train.py</code>, <code>app.py</code>, <code>detector.py</code>,
+<code>retrain_trigger.py</code> y los tests — es <em>completamente agnóstico</em>
+al algoritmo y al proveedor de almacenamiento. Agregar un nuevo caso de uso
+(nuevo dataset, nuevo backend cloud, nuevo algoritmo) requiere:
+<ol style="margin:6px 0 0 0">
+  <li>Opcionalmente: implementar una subclase de <code>StorageBackend</code>
+      o <code>ModelStrategy</code> y registrarla.</li>
+  <li>Crear un nuevo archivo YAML en <code>configs/</code>.</li>
+  <li>Ejecutar <code>init_project.py</code> si el backend es DVC.</li>
+</ol>
+Los servicios del stack no se tocan.
+</div>
+
 </body>
 </html>

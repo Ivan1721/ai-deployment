@@ -1,0 +1,79 @@
+# custom-regressor-dvc.yaml
+# ──────────────────────────────────────────────────────────────────────────────
+# Caso de uso: regresor de precios de viviendas con datos almacenados en DVC
+# (remote Azure Blob Storage). Algoritmo: KernelWeightedRegressor (Nadaraya-Watson),
+# implementado 100% en NumPy — no existe en scikit-learn.
+#
+# Para activar este caso de uso:
+#   export MODEL_CONFIG=/app/configs/custom-regressor-dvc.yaml
+#   (o ajustar MODEL_CONFIG en docker-compose.yml)
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: housing-kernel-regressor
+problem_type: regression
+
+data_source:
+  type: csv
+  path: data/housing.csv          # ruta relativa al repo, trackeada por DVC
+  target_column: price
+
+  # ── Backend de almacenamiento ────────────────────────────────────────────
+  # Cambiar 'backend' para alternar entre proveedores sin tocar el código:
+  #   git_local      → archivo en disco (por defecto, caso Iris)
+  #   dvc            → DVC genérico (S3, GCS, SSH, local)
+  #   azure          → Azure Blob Storage directo (SDK)
+  #   gdrive         → Google Drive vía DVC remote gdrive://
+  #   encrypted_local → DVC remote en carpeta encriptada
+  storage:
+    backend: azure
+    container: mlops-datasets          # nombre del contenedor Azure Blob
+    # connection_string: "..."         # preferir AZURE_STORAGE_CONNECTION_STRING (env var)
+
+  # ── Alternativas comentadas ─────────────────────────────────────────────
+  # Para DVC genérico (S3, GCS, SSH):
+  # storage:
+  #   backend: dvc
+  #   remote: s3remote                 # configurado en .dvc/config
+  #   rev: v1.2                        # reproducibilidad exacta
+  #
+  # Para Google Drive:
+  # storage:
+  #   backend: gdrive
+  #   remote: gdrive                   # dvc remote add gdrive gdrive://<folder_id>
+  #
+  # Para carpeta local encriptada (LUKS / VeraCrypt):
+  # storage:
+  #   backend: encrypted_local
+  #   remote: local_enc                # dvc remote add local_enc /mnt/secure/dvc-cache
+  #   encrypted_path: /mnt/secure      # ruta del volumen montado (verificación en startup)
+
+model:
+  family: kernel_weighted_regressor
+  params:
+    bandwidth: 0.8                     # ajustar según escala de los features
+
+training:
+  test_size: 0.20
+  stratify: false                      # regresión: sin estratificación
+  cv_folds: 5
+
+mlflow:
+  experiment_name: housing-kernel-production
+  registered_model_name: housing-kernel-regressor
+
+quality_gates:
+  min_r2: 0.70
+  max_mae: 60000.0
+
+drift:
+  data_drift_method: ks
+  data_drift_p_value: 0.05
+  concept_drift_p_value: 0.05
+  performance:
+    enabled: true
+    effect_size_threshold: 0.05
+    p_value_threshold: 0.05
+    consecutive_windows: 2
+
+retrain:
+  challenger_min_improvement: 0.01    # r2 mínimo sobre el campeón para promover
