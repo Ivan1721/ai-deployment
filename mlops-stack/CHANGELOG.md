@@ -1,5 +1,104 @@
 # Changelog — HRI Dataset Integration
 
+---
+
+## Block 2 — PostgreSQL + DVC  |  2026-06-17
+
+### Gap 5 — PostgreSQL como backend de MLflow (reemplaza SQLite)
+
+**Problema:** SQLite no soporta escrituras concurrentes; en producción con múltiples workers o runs paralelos puede corromperse o bloquearse.
+
+**Cambios:**
+
+| Archivo | Cambio |
+|---|---|
+| `mlflow/Dockerfile` | Añade `psycopg2-binary==2.9.9` para que MLflow pueda conectarse a PostgreSQL |
+| `mlflow/entrypoint.sh` | Lee `POSTGRES_URI` del entorno; si está vacío cae back a SQLite (dev local sin `.env`) |
+| `docker-compose.yml` | Nuevo servicio `postgres` (imagen `postgres:16-alpine`) con healthcheck, volumen `postgres-data`. MLflow depende de `postgres: condition: service_healthy` |
+| `.env.example` | Añade `POSTGRES_PASSWORD` |
+
+**Primera vez con PostgreSQL:** el volumen MLflow anterior (SQLite) es incompatible. Correr `docker compose down -v` antes de levantar con el nuevo stack.
+
+**Variables de entorno nuevas:**
+
+| Variable | Dónde se usa | Valor ejemplo |
+|---|---|---|
+| `POSTGRES_PASSWORD` | docker-compose → postgres + mlflow URI | `mi-clave-segura` |
+| `POSTGRES_URI` | mlflow container (seteado internamente por compose) | `postgresql://mlflow:<PW>@postgres:5432/mlflow` |
+
+---
+
+### Gap 7 — DVC para versionar `data/simulation_all.csv`
+
+**Problema:** El dataset estaba en git directamente. Para datasets más grandes o en producción, los archivos de datos no deben estar en el repositorio.
+
+**Cambios:**
+
+| Archivo | Cambio |
+|---|---|
+| `.dvc/config` | Remote local en `/opt/mlops-dvc-store` |
+| `data/simulation_all.csv.dvc` | Puntero DVC (md5 + tamaño del CSV) |
+| `data/.gitignore` | Excluye `simulation_all.csv` del repositorio git |
+| `.github/workflows/ci.yml` | Paso `dvc pull` antes de build |
+| `.github/workflows/cd.yml` | Paso `dvc pull` después de rsync, antes de build |
+| `setup_runner.sh` | Instala DVC y crea `/opt/mlops-dvc-store` |
+
+**Flujo de datos con DVC:**
+
+```
+Primera vez (máquina con el CSV):
+  cd mlops-stack
+  dvc init
+  dvc add data/simulation_all.csv   # crea data/simulation_all.csv.dvc
+  sudo mkdir -p /opt/mlops-dvc-store
+  dvc push                           # sube el CSV al remote local
+
+CI/CD y otras máquinas:
+  dvc pull                           # descarga el CSV del remote
+```
+
+**Remote configurado:** `/opt/mlops-dvc-store` (directorio local en el servidor). Para producción real se cambiaría a S3/GCS en `.dvc/config`.
+
+---
+
+## Block 1 — TLS + Autenticación API  |  2026-06-17
+
+### Gap 4 — TLS con nginx (HTTPS)
+
+**Problema:** Todo el tráfico viajaba en HTTP plano.
+
+**Cambios:**
+
+| Archivo | Cambio |
+|---|---|
+| `nginx/Dockerfile` | Instala `openssl`, genera certificado auto-firmado en build time (`/etc/nginx/ssl/server.crt`) |
+| `nginx/nginx.conf` | Servidor en puerto 80 redirige 301 → HTTPS. Servidor en 443 con `ssl_protocols TLSv1.2 TLSv1.3`, `ssl_ciphers HIGH:!aNULL:!MD5`. Pasa header `X-API-Key` al backend |
+| `docker-compose.yml` | Puerto `443:443` añadido a nginx |
+
+Certificado auto-firmado → usar `-k` en curl. Para producción usar Let's Encrypt.
+
+### Gap 3 — Autenticación con API key
+
+**Problema:** Cualquier cliente podía llamar a `/predict` y `/reload` sin autenticarse.
+
+**Cambios:**
+
+| Archivo | Cambio |
+|---|---|
+| `inference-api/app.py` | `APIKeyHeader("X-API-Key")` como dependencia FastAPI en `/predict` y `/reload`. Auth desactivada si `API_KEY=""` (dev local) |
+| `drift-detector/detector.py` | Envía `X-API-Key` en llamadas internas a `/predict` |
+| `drift-detector/retrain_trigger.py` | Envía `X-API-Key` en llamadas a `/reload` |
+| `tests/test_api.py` | `_AUTH_HEADERS` inyectado en todas las llamadas HTTP del test suite |
+| `.github/workflows/` | `API_KEY=${{ secrets.API_KEY }}` pasado como `-e` en todos los `docker compose run test-runner` |
+| `.env.example` | Documenta `API_KEY` |
+
+**Endpoints públicos** (sin auth): `GET /health`, `GET /info`  
+**Endpoints protegidos**: `POST /predict`, `POST /reload`
+
+**Secret de GitHub necesario:** `API_KEY` — Settings → Secrets → Actions → New repository secret.
+
+---
+
 ## Branch `feature/dataset-update`  |  2026-06-08
 
 ### Contexto
@@ -276,8 +375,10 @@ curl -X POST http://localhost:8000/predict \
 
 | Servicio | URL |
 |---|---|
-| MLflow UI (experimentos y modelos) | http://localhost:5001 |
-| Inference API | http://localhost:8000 |
+| MLflow UI (vía nginx, HTTPS) | https://localhost/mlflow/ |
+| MLflow UI (directo, dev) | http://localhost:5001 |
+| Inference API vía nginx | https://localhost/api/ |
+| Inference API (directo, dev) | http://localhost:8000 |
 | API docs interactivos (Swagger) | http://localhost:8000/docs |
 | Health check | http://localhost:8000/health |
 

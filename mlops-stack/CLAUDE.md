@@ -100,9 +100,9 @@ To switch to Iris classification mode, change `MODEL_CONFIG` in docker-compose.y
 | `inference-api` | 8000 | unless-stopped | FastAPI; loads all 8 Production models at startup |
 | `drift-detector` | — | unless-stopped | Background loop; KS tests + performance drift every 30s |
 | `test-runner` | — | no | QA suite; invoked manually or from CI |
-| `nginx` | 80 | unless-stopped | Reverse proxy |
+| `nginx` | 80, 443 | unless-stopped | Reverse proxy — HTTP→HTTPS redirect, TLS termination |
 
-All services share `mlops-net` bridge. The `mlflow-data` volume is the single source of truth for all models — it is mounted into `mlflow`, `model-trainer`, `inference-api`, `drift-detector`, and `test-runner`.
+All services share `mlops-net` bridge. The `mlflow-data` volume is the single source of truth for all models — it is mounted into `mlflow`, `model-trainer`, `inference-api`, `drift-detector`, and `test-runner`. `postgres-data` holds MLflow metadata (runs, params, metrics).
 
 ### Dataset
 
@@ -164,15 +164,23 @@ Orchestrated by `run_tests.py` (4 levels run in sequence):
 | 3 | `test_api.py` | HTTP 200, schema, non-negative predictions, latency < 500ms |
 | 4 | `test_performance_drift.py` | Drift detector logic (unit tests) |
 
+### Security
+
+**TLS**: nginx generates a self-signed certificate at image build time (`nginx/Dockerfile`). All HTTP traffic is redirected to HTTPS. Use `-k` in curl to skip cert validation.
+
+**API key**: `POST /predict` and `POST /reload` require `X-API-Key: <value>` header. Auth is disabled when `API_KEY` env var is empty (useful for local dev without `.env`). `/health` and `/info` are always public.
+
+GitHub Actions Secrets needed: `API_KEY`, `POSTGRES_PASSWORD` — set in repo Settings → Secrets → Actions.
+
 ### CI/CD (`.github/workflows/`)
 
 All workflows use `runs-on: self-hosted` — the runner shares the Docker socket with the host.
 
-- `ci.yml`: triggers on PR/push to `main`/`develop`. Builds → trains → runs QA suite. Cleans containers but **not volumes** (`docker compose down` without `-v`).
-- `cd.yml`: triggers on push to `main`. Syncs files to `/opt/mlops-stack`, rebuilds, checks if `hri-HumanOnly-TotalRecollected` exists in Production before deciding to retrain.
-- `retrain.yml`: scheduled Mondays 03:00 UTC, or manual dispatch.
+- `ci.yml`: triggers on PR/push to `main`/`develop`. Runs `dvc pull` → builds → trains → runs QA suite. Cleans containers but **not volumes**.
+- `cd.yml`: triggers on push to `main`. Syncs `mlops-stack/` to `/opt/mlops-stack`, runs `dvc pull`, rebuilds, checks if `hri-HumanOnly-TotalRecollected` is in Production before deciding to retrain.
+- `retrain.yml`: scheduled Mondays 03:00 UTC, or manual dispatch. Includes `max_smape` gate input.
 
-**Note**: `mlops-stack/.github/workflows/retrain.yml` and `.github/workflows/retrain.yml` both pass `GATE_MIN_R2`/`GATE_MAX_SMAPE`; the former is used when the stack is deployed at `/opt/mlops-stack`.
+**Workflow files**: the real workflows that GitHub executes are in `ai-deployment/.github/workflows/`. The copies in `mlops-stack/.github/workflows/` get synced to `/opt/mlops-stack/.github/workflows/` via rsync (for reference only — GitHub does not pick them up from there).
 
 ### BuildKit
 
