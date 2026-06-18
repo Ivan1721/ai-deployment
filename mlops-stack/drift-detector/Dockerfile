@@ -13,7 +13,8 @@ RUN pip install --no-cache-dir --timeout=120 --retries=5 \
     pyyaml==6.0.1
 
 RUN pip install --no-cache-dir --timeout=120 --retries=5 \
-    mlflow==2.13.0
+    mlflow==2.13.0 \
+    prometheus-client==0.20.0
 
 COPY mlops_common ./mlops_common
 COPY configs ./configs

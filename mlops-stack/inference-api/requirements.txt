@@ -8,3 +8,4 @@ pydantic==2.7.1
 xgboost==2.0.3
 lightgbm==4.3.0
 catboost==1.2.3
+prometheus-client==0.20.0

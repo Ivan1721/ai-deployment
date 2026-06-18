@@ -23,6 +23,7 @@ mlartifacts/
 # Reportes de tests
 *.json
 !package.json
+!grafana/dashboards/*.json
 
 # Logs
 *.log

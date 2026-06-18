@@ -22,6 +22,7 @@ try:
     import retrain_trigger
     from performance_drift_detector import PerformanceDriftDetector, PerformanceDriftMonitor
     from mlops_common import load_config
+    from prometheus_client import Counter, Gauge, start_http_server
     print("All imports OK", flush=True)
 except Exception as e:
     print(f"IMPORT ERROR: {e}", flush=True)
@@ -68,6 +69,27 @@ VALID_HUMANS    = [1, 3, 6, 8, 10, 12]
 VALID_ROWS      = [1, 2, 3]
 VALID_ACTIVITIES = ["harv_ground", "harv_ladder", "harv_mixed", "harv_picker"]
 
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+KS_PVAL = Gauge(
+    "drift_ks_pval",
+    "KS test p-value per input feature (lower = more drift)",
+    ["feature"],
+)
+DRIFT_DETECTED = Counter(
+    "drift_detected_total",
+    "Drift detections by type",
+    ["type"],
+)
+CONSEC_WINDOWS = Gauge(
+    "drift_consecutive_windows",
+    "Current count of consecutive windows with drift",
+)
+RETRAIN_TRIGGERED = Counter(
+    "drift_retrain_triggered_total",
+    "Retraining triggers by reason",
+    ["reason"],
+)
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -247,6 +269,7 @@ def run_cycle(cycle: int, ref: dict, df: pd.DataFrame, consec: int) -> int:
     drifted_feats = []
     for feat in FEATURE_NAMES:
         stat, pval = stats.ks_2samp(ref[feat], feat_df[feat].values)
+        KS_PVAL.labels(feature=feat).set(pval)
         if pval < KS_THR:
             data_drifted = True
             drifted_feats.append(feat)
@@ -263,8 +286,14 @@ def run_cycle(cycle: int, ref: dict, df: pd.DataFrame, consec: int) -> int:
         log.info(f"  KS [predictions  ]: stat={stat:.4f}  pval={pred_ks_pval:.4f}  "
                  f"drift={'YES' if concept_drifted else 'no'}")
 
+    if data_drifted:
+        DRIFT_DETECTED.labels(type="data").inc()
+    if concept_drifted:
+        DRIFT_DETECTED.labels(type="concept").inc()
+
     any_drift = data_drifted or concept_drifted
     consec    = consec + 1 if any_drift else 0
+    CONSEC_WINDOWS.set(consec)
 
     log.info(f"  Status: {'DRIFT ⚠' if any_drift else 'OK ✓'}  "
              f"consecutive={consec}/{CONSEC_NEED}")
@@ -293,12 +322,14 @@ def run_cycle(cycle: int, ref: dict, df: pd.DataFrame, consec: int) -> int:
     # ── Trigger retrain ───────────────────────────────────────────────────────
     if consec >= CONSEC_NEED:
         log.warning(f"  RETRAINING TRIGGERED (consecutive={consec})")
+        reason = "data_drift" if data_drifted else "concept_drift"
         try:
             retrain_trigger.trigger(
-                reason="data_drift" if data_drifted else "concept_drift",
+                reason=reason,
                 consecutive_windows=consec,
                 mlflow_uri=MLFLOW_URI,
             )
+            RETRAIN_TRIGGERED.labels(reason=reason).inc()
             consec = 0
         except Exception:
             log.error(f"  Retrain failed:\n{traceback.format_exc()}")
@@ -357,6 +388,9 @@ def main():
     log.info("Drift Detector — HRI Regression mode")
     log.info(f"  MLFLOW_URI={MLFLOW_URI}  WIN_SIZE={WIN_SIZE}  INTERVAL={INTERVAL_S}s")
 
+    start_http_server(9091)
+    log.info("Prometheus metrics server started on :9091")
+
     wait_for(f"{MLFLOW_URI}/",     "MLflow")
     wait_for(f"{INFER_URL}/health", "InferenceAPI", retries=10, delay=3)
 
@@ -390,6 +424,7 @@ def main():
                         consecutive_windows=perf_consec,
                         mlflow_uri=MLFLOW_URI,
                     )
+                    RETRAIN_TRIGGERED.labels(reason="performance_drift").inc()
                     perf_consec = 0
                     perf_monitor.reset_buffer()
                 except Exception:

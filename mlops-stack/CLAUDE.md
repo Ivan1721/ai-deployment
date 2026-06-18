@@ -97,10 +97,12 @@ To switch to Iris classification mode, change `MODEL_CONFIG` in docker-compose.y
 | `postgres` | — | unless-stopped | PostgreSQL 16 — MLflow metadata backend (runs, params, metrics) |
 | `mlflow` | 5001 | unless-stopped | Tracking server + Model Registry (PostgreSQL backend + filesystem artifacts) |
 | `model-trainer` | — | no | One-shot training job; exits after registering 8 models |
-| `inference-api` | 8000 | unless-stopped | FastAPI; loads all 8 Production models at startup |
-| `drift-detector` | — | unless-stopped | Background loop; KS tests + performance drift every 30s |
+| `inference-api` | 8000 | unless-stopped | FastAPI; loads all 8 Production models at startup. Exposes `/metrics` for Prometheus |
+| `drift-detector` | 9091 | unless-stopped | Background loop; KS tests + performance drift every 30s. Exposes Prometheus metrics on :9091 |
 | `test-runner` | — | no | QA suite; invoked manually or from CI |
-| `nginx` | 80, 443 | unless-stopped | Reverse proxy — HTTP→HTTPS redirect, TLS termination |
+| `nginx` | 80, 443 | unless-stopped | Reverse proxy — HTTP→HTTPS redirect, TLS termination, /grafana/ proxy |
+| `prometheus` | 9090 | unless-stopped | Scrapes inference-api:8000/metrics and drift-detector:9091 every 15s, retains 30d |
+| `grafana` | 3000 | unless-stopped | Dashboards auto-provisioned from grafana/; accessible at https://localhost/grafana/ |
 
 All services share `mlops-net` bridge. The `mlflow-data` volume is the single source of truth for all models — it is mounted into `mlflow`, `model-trainer`, `inference-api`, `drift-detector`, and `test-runner`. `postgres-data` holds MLflow metadata (runs, params, metrics).
 
@@ -171,6 +173,25 @@ Orchestrated by `run_tests.py` (4 levels run in sequence):
 **API key**: `POST /predict` and `POST /reload` require `X-API-Key: <value>` header. Auth is disabled when `API_KEY` env var is empty (useful for local dev without `.env`). `/health` and `/info` are always public.
 
 GitHub Actions Secrets needed: `API_KEY`, `POSTGRES_PASSWORD` — set in repo Settings → Secrets → Actions.
+
+### Observability (Prometheus + Grafana)
+
+`inference-api` exposes Prometheus metrics at `GET /metrics` (port 8000).  
+`drift-detector` exposes metrics at port 9091 via `prometheus_client.start_http_server(9091)`.
+
+Prometheus scrapes both every 15s. Grafana is pre-provisioned with `grafana/dashboards/mlops.json`.
+
+Key metrics:
+| Metric | Type | Source |
+|---|---|---|
+| `inference_models_loaded` | Gauge | inference-api |
+| `inference_requests_total{endpoint,status}` | Counter | inference-api |
+| `inference_request_duration_seconds{endpoint}` | Histogram | inference-api |
+| `inference_predictions_total{scenario,activity}` | Counter | inference-api |
+| `drift_ks_pval{feature}` | Gauge | drift-detector |
+| `drift_detected_total{type}` | Counter | drift-detector |
+| `drift_consecutive_windows` | Gauge | drift-detector |
+| `drift_retrain_triggered_total{reason}` | Counter | drift-detector |
 
 ### CI/CD (`.github/workflows/`)
 

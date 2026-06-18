@@ -14,10 +14,11 @@ from typing import Dict
 import mlflow
 import mlflow.sklearn
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
+from prometheus_client import Counter, Histogram, Gauge, make_asgi_app
 
 from mlops_common import load_config
 
@@ -26,7 +27,6 @@ log = logging.getLogger(__name__)
 
 TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
 MODEL_STAGE  = os.environ.get("MODEL_STAGE", "Production")
-# <<<<<<< feature/dataset-update
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000").split(",")
 API_KEY      = os.environ.get("API_KEY", "")
 
@@ -38,14 +38,10 @@ def _check_api_key(key: str = Depends(_api_key_header)) -> None:
     if API_KEY and key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
 
+
 # Load configuration from MODEL_CONFIG YAML
 _cfg = load_config()
 _ms  = _cfg.multi_slot
-# =======
-# # SECURITY FIX P0-2: CORS debe restringirse a dominios confiables
-# # Valores por defecto: solo localhost (desarrollo), cambiar en producción
-# CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost,http://localhost:3000,http://localhost:8080").split(",")
-# >>>>>>> develop
 
 SCENARIOS       = _ms.scenarios       if _ms else {0: "HumanOnly", 1: "WithRobot"}
 TARGETS         = _ms.targets         if _ms else {}
@@ -53,6 +49,28 @@ FEATURE_NAMES   = _ms.feature_names   if _ms else []
 ACTIVITY_VALUES = ["harv_ground", "harv_ladder", "harv_mixed", "harv_picker"]
 
 state: Dict = {"models": {}, "loaded_at": None}
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+REQUESTS_TOTAL = Counter(
+    "inference_requests_total",
+    "Total HTTP requests by endpoint and status code",
+    ["endpoint", "status"],
+)
+REQUEST_DURATION = Histogram(
+    "inference_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["endpoint"],
+    buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5],
+)
+MODELS_LOADED = Gauge(
+    "inference_models_loaded",
+    "Number of models currently loaded (target: 8)",
+)
+PREDICTIONS_TOTAL = Counter(
+    "inference_predictions_total",
+    "Total prediction requests by scenario and activity",
+    ["scenario", "activity"],
+)
 
 
 def _encode_activity(activity: str) -> Dict[str, int]:
@@ -85,7 +103,9 @@ def load_all_models(retries: int = 20, delay: int = 6) -> None:
 
     state["models"]    = loaded
     state["loaded_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    log.info(f"Models loaded: {sum(len(v) for v in loaded.values())}/8")
+    total = sum(len(v) for v in loaded.values())
+    MODELS_LOADED.set(total)
+    log.info(f"Models loaded: {total}/8")
 
 
 @asynccontextmanager
@@ -100,7 +120,6 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
-# <<<<<<< feature/dataset-update
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -108,22 +127,20 @@ app.add_middleware(
     allow_headers=["Content-Type", "Accept"],
     max_age=3600,
 )
-# =======
-# <<<<<<< develop
 
-# SECURITY FIX P0-2: CORS restricción a dominios confiables
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=CORS_ORIGINS,
-#     allow_methods=["GET", "POST"],           # Solo métodos necesarios
-#     allow_headers=["Content-Type", "Accept"],
-#     max_age=3600,                             # Cache de preflight por 1 hora
-#     allow_credentials=True,
-# )
-# # =======
-# # app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-# # >>>>>>> feature/dataset-update
-# >>>>>>> develop
+# Prometheus metrics endpoint
+app.mount("/metrics", make_asgi_app())
+
+
+@app.middleware("http")
+async def _metrics_middleware(request: Request, call_next):
+    if request.url.path in ("/metrics", "/metrics/"):
+        return await call_next(request)
+    start = time.time()
+    response = await call_next(request)
+    REQUEST_DURATION.labels(endpoint=request.url.path).observe(time.time() - start)
+    REQUESTS_TOTAL.labels(endpoint=request.url.path, status=str(response.status_code)).inc()
+    return response
 
 
 class PredictRequest(BaseModel):
@@ -188,6 +205,7 @@ def predict(req: PredictRequest):
     ]], columns=FEATURE_NAMES).values
 
     preds = {alias: round(float(model.predict(X)[0]), 4) for alias, model in models.items()}
+    PREDICTIONS_TOTAL.labels(scenario=scenario_label, activity=req.activity).inc()
 
     return PredictResponse(
         scenario_label=scenario_label,

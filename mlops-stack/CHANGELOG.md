@@ -2,6 +2,54 @@
 
 ---
 
+## Block 3 — Prometheus + Grafana (Observabilidad)  |  2026-06-18
+
+### Gap 6 — Métricas de operación con Prometheus + Grafana
+
+**Problema:** el stack no tiene visibilidad en tiempo real de latencia, tasa de errores, estado de modelos ni detección de drift. Sin métricas operacionales no es posible hacer SLA ni root cause analysis.
+
+**Solución implementada:**
+
+**Instrumentación (`prometheus-client==0.20.0`):**
+- `inference-api/app.py` — 4 métricas nuevas expuestas en `GET /metrics`:
+  - `inference_requests_total{endpoint, status}` — contador por endpoint y código HTTP
+  - `inference_request_duration_seconds{endpoint}` — histograma de latencia (buckets hasta 2.5s)
+  - `inference_models_loaded` — gauge: cuántos modelos están actualmente cargados (objetivo: 8)
+  - `inference_predictions_total{scenario, activity}` — contador de predicciones por escenario y actividad
+- `drift-detector/detector.py` — 4 métricas expuestas en `:9091` vía `start_http_server`:
+  - `drift_ks_pval{feature}` — gauge: p-value del KS test por feature (< 0.05 = drift)
+  - `drift_detected_total{type}` — contador: detecciones de drift data/concept
+  - `drift_consecutive_windows` — gauge: ventanas consecutivas con drift activo
+  - `drift_retrain_triggered_total{reason}` — contador: reentrenamientos disparados por razón
+
+**Infraestructura:**
+- `prometheus/prometheus.yml` — scraping de `inference-api:8000/metrics` y `drift-detector:9091` cada 15s
+- `grafana/provisioning/` — datasource Prometheus + provider de dashboards auto-provisionados
+- `grafana/dashboards/mlops.json` — dashboard con 8 paneles:
+  - Fila 1 (stats): Models Loaded, Request Rate, Consecutive Drift Windows, Retrain Triggers
+  - Fila 2 (time series): Latencia p50/p95/p99 de `/predict`, Requests/s por endpoint
+  - Fila 3 (time series): KS p-values por feature con línea threshold 0.05, Drift detections por tipo
+
+**Docker Compose:**
+- Servicio `prometheus` (prom/prometheus:v2.51.2) — `127.0.0.1:9090`, retención 30d
+- Servicio `grafana` (grafana/grafana:10.4.2) — `127.0.0.1:3000`, acceso vía nginx `/grafana/`
+- Volúmenes: `prometheus-data`, `grafana-data`
+
+**nginx:** nueva `location /grafana/` — proxy a `grafana:3000` con sub-path routing correcto.
+
+**Variables de entorno añadidas:**
+- `GRAFANA_ADMIN_PASSWORD` (`.env.example`)
+
+**URLs de acceso (tras `docker compose up`):**
+| Panel | URL |
+|---|---|
+| Grafana | https://localhost/grafana/ |
+| Prometheus UI | http://localhost:9090 (solo localhost) |
+| Inference metrics | http://localhost:8000/metrics (solo localhost) |
+| Drift metrics | http://localhost:9091/metrics (solo localhost) |
+
+---
+
 ## Block 2 — PostgreSQL + DVC  |  2026-06-17
 
 ### Gap 5 — PostgreSQL como backend de MLflow (reemplaza SQLite)
