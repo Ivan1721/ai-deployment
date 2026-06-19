@@ -7,7 +7,9 @@ scrape_configs:
     static_configs:
       - targets: ['inference-api:8000']
     metrics_path: /metrics
+    honor_timestamps: false
 
   - job_name: 'drift-detector'
     static_configs:
       - targets: ['drift-detector:9091']
+    honor_timestamps: false

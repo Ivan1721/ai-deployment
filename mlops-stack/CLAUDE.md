@@ -2,15 +2,46 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## First-time Setup
+
+```bash
+cd mlops-stack
+
+# 1. Generate .env with random secrets
+bash setup-env.sh
+
+# 2. Generate self-signed TLS certs for nginx
+bash generate-certs.sh localhost
+
+# 3. Create DVC local store and push data (once per machine)
+sudo mkdir -p /opt/mlops-dvc-store && sudo chown $USER:$USER /opt/mlops-dvc-store
+dvc push   # or: dvc pull (if data was already pushed by another machine)
+
+# 4. Start full stack (builds, trains, configures Keycloak automatically)
+docker compose down -v   # wipe volumes on first run or after model changes
+bash start.sh
+```
+
+After `start.sh` completes:
+- **MLflow UI** → https://localhost/mlflow/ (login: `mlops-user` / `mlops123`)
+- **Grafana** → https://localhost/grafana/ (login: `admin` / value of `GRAFANA_ADMIN_PASSWORD` in `.env`)
+- **Inference API** → http://localhost:8000/docs
+
+Note: browser will warn about the self-signed cert — click "Advanced → Proceed".
+
 ## Common Commands
 
 ```bash
-# Start full stack (build + train + inference API + nginx)
-bash start.sh
+# Start full stack — skips training if models already exist
+bash start.sh --skip-train
 
-# Rebuild + wipe volumes (required when train.py changes metrics or model structure)
+# Full restart wiping all data (required when train.py changes)
 docker compose down -v
 bash start.sh
+
+# Retrain without restarting the stack
+docker compose run --rm model-trainer
+curl -X POST http://localhost:8000/reload -H "X-API-Key: $(grep ^API_KEY .env | cut -d= -f2)"
 
 # Manual step-by-step
 docker compose build
@@ -214,13 +245,7 @@ All workflows use `runs-on: self-hosted` — the runner shares the Docker socket
 
 ### BuildKit
 
-`start.sh` creates a named buildx builder `mlops-builder` on first run to avoid Docker's default builder lease-corruption bug on interrupted builds:
-
-```bash
-docker buildx inspect mlops-builder > /dev/null 2>&1 \
-  || docker buildx create --name mlops-builder --driver docker-container
-export BUILDX_BUILDER=mlops-builder
-```
+`start.sh` uses `docker compose build --parallel` directly (no custom buildx builder). The `docker-container` driver causes lease-corruption errors on WSL2 + Docker Desktop.
 
 ### When to use `docker compose down -v`
 

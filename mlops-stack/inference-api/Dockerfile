@@ -24,7 +24,8 @@ RUN pip install --no-cache-dir --timeout=120 --retries=5 \
 RUN pip install --no-cache-dir --timeout=120 --retries=5 \
     fastapi==0.111.0 \
     uvicorn[standard]==0.29.0 \
-    pydantic==2.7.1
+    pydantic==2.7.1 \
+    prometheus-client==0.20.0
 
 COPY mlops_common ./mlops_common
 COPY configs ./configs

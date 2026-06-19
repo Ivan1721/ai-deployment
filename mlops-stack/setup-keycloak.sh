@@ -68,7 +68,7 @@ echo "  Realm created ✓"
 
 # Crear cliente OIDC "mlops-client"
 echo "▶ Creating OIDC client: mlops-client..."
-CLIENT_ID=$(curl -s -X POST \
+curl -s -X POST \
   "$KEYCLOAK_URL/admin/realms/mlops/clients" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
@@ -87,7 +87,24 @@ CLIENT_ID=$(curl -s -X POST \
     "standardFlowEnabled": true,
     "implicitFlowEnabled": false,
     "directAccessGrantsEnabled": false
-  }' | jq -r '.id')
+  }' > /dev/null
+
+# Renovar token antes de buscar el cliente (puede haber expirado)
+ADMIN_TOKEN=$(curl -s -X POST \
+  "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=admin-cli&username=$ADMIN_USER&password=$ADMIN_PASSWORD&grant_type=password" \
+  | jq -r '.access_token')
+
+# Keycloak 23 devuelve el UUID en el header Location — buscar por nombre
+CLIENT_ID=""
+for i in 1 2 3; do
+  CLIENT_ID=$(curl -s \
+    "$KEYCLOAK_URL/admin/realms/mlops/clients?clientId=mlops-client" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r 'if type=="array" then .[0].id else empty end')
+  [ -n "$CLIENT_ID" ] && [ "$CLIENT_ID" != "null" ] && break
+  sleep 2
+done
 
 echo "  Client ID: $CLIENT_ID ✓"
 

@@ -87,11 +87,12 @@ services:
     ports:
       - "127.0.0.1:8000:8000"       # localhost-only: acceso público solo vía nginx
     environment:
-      MLFLOW_TRACKING_URI: http://mlflow:5001
-      MODEL_STAGE:         Production
-      MODEL_CONFIG:        /app/configs/hri-harvesting.yaml
-      DATASET_PATH:        /data/simulation_all.csv
-      API_KEY:             ${API_KEY:-}
+      MLFLOW_TRACKING_URI:                 http://mlflow:5001
+      MODEL_STAGE:                         Production
+      MODEL_CONFIG:                        /app/configs/hri-harvesting.yaml
+      DATASET_PATH:                        /data/simulation_all.csv
+      API_KEY:                             ${API_KEY:-}
+      PROMETHEUS_DISABLE_CREATED_SERIES:   "true"
     volumes:
       - mlflow-data:/mlflow
       - ./data:/data:ro
@@ -99,7 +100,7 @@ services:
       mlflow:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -122,11 +123,12 @@ services:
       CONSECUTIVE_DRIFT_WINDOWS: "2"
       WINDOW_SIZE:               "30"
       CHECK_INTERVAL_S:          "30"
-      ENABLE_PERFORMANCE_DRIFT:  "true"
-      PERF_DRIFT_EFFECT_SIZE:    "0.05"
-      PERF_DRIFT_P_VALUE:        "0.05"
-      PERF_DRIFT_CONSECUTIVE:    "2"
-      API_KEY:                   ${API_KEY:-}
+      ENABLE_PERFORMANCE_DRIFT:          "true"
+      PERF_DRIFT_EFFECT_SIZE:            "0.05"
+      PERF_DRIFT_P_VALUE:                "0.05"
+      PERF_DRIFT_CONSECUTIVE:            "2"
+      API_KEY:                           ${API_KEY:-}
+      PROMETHEUS_DISABLE_CREATED_SERIES: "true"
     volumes:
       - mlflow-data:/mlflow
       - ./data:/data:ro
@@ -179,12 +181,15 @@ services:
     image: quay.io/keycloak/keycloak:23.0.7
     container_name: keycloak
     restart: unless-stopped
+    command: ["start-dev"]
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
-      KC_DB: h2
+      KC_DB: dev-file
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HOSTNAME_URL: http://localhost:8080
+      KC_HOSTNAME_ADMIN_URL: http://localhost:8080
     ports:
       - "127.0.0.1:8080:8080"       # localhost-only
     volumes:
@@ -192,7 +197,7 @@ services:
     networks:
       - mlops-net
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -250,10 +255,14 @@ services:
       OAUTH2_PROXY_COOKIE_SECRET:         ${OAUTH2_COOKIE_SECRET:-change-me-32-chars-minimum!!}
       OAUTH2_PROXY_COOKIE_SECURE:         "true"
       OAUTH2_PROXY_COOKIE_HTTPONLY:       "true"
-      OAUTH2_PROXY_COOKIE_SAMESITE:       "Strict"
-      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:  "true"
+      OAUTH2_PROXY_COOKIE_SAMESITE:                    "strict"
+      OAUTH2_PROXY_INSECURE_OIDC_SKIP_ISSUER_VERIFICATION:  "true"
+      OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL:    "true"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON:               "true"
       OAUTH2_PROXY_HTTP_ADDRESS:          0.0.0.0:4180
       OAUTH2_PROXY_SKIP_AUTH_PATHS:       "^/oauth2/.*"
+    command:
+      - --email-domain=*
     ports:
       - "127.0.0.1:4180:4180"       # localhost-only
     depends_on:
@@ -262,7 +271,7 @@ services:
     networks:
       - mlops-net
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:4180/ping"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/4180"]
       interval: 10s
       timeout: 5s
       retries: 20
