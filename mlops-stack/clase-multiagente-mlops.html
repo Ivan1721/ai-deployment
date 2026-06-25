@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clase: Sistema Multi-Agente MLOps</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+:root {
+  --bg:      #0a0e14;
+  --surf:    #111722;
+  --surf2:   #161e2c;
+  --border:  #1e2a3a;
+  --text:    #c9d1d9;
+  --muted:   #6e7681;
+  --dim:     #3d4a5c;
+
+  --blue:    #4a9eda;
+  --green:   #3dba6e;
+  --orange:  #f0a742;
+  --purple:  #b07fff;
+  --red:     #f06060;
+  --cyan:    #56d0e0;
+  --lime:    #c9e13a;
+  --yellow:  #ffd166;
+  --white:   #e6edf3;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+/* ─── NAV ─── */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(10,14,20,.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 48px;
+  overflow-x: auto;
+}
+.nav-brand {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  margin-right: 24px;
+  flex-shrink: 0;
+}
+.nav-link {
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0 14px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  flex-shrink: 0;
+}
+.nav-link:hover { color: var(--white); border-bottom-color: var(--dim); }
+.nav-link.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+/* ─── PAGE LAYOUT ─── */
+.page { max-width: 920px; margin: 0 auto; padding: 0 24px 80px; }
+
+/* ─── COVER ─── */
+.cover {
+  padding: 64px 0 48px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 56px;
+}
+.cover-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 16px;
+}
+.cover h1 {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--white);
+  line-height: 1.2;
+  letter-spacing: -.5px;
+  margin-bottom: 16px;
+}
+.cover h1 span { color: var(--blue); }
+.cover-sub {
+  font-size: 15px;
+  color: var(--muted);
+  max-width: 600px;
+  margin-bottom: 28px;
+}
+.cover-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid;
+}
+.pill-blue  { color: var(--blue);   border-color: rgba(74,158,218,.35);  background: rgba(74,158,218,.08); }
+.pill-green { color: var(--green);  border-color: rgba(61,186,110,.35);  background: rgba(61,186,110,.08); }
+.pill-muted { color: var(--muted);  border-color: var(--border);         background: var(--surf); }
+
+/* ─── SECTIONS ─── */
+.section { margin-bottom: 64px; }
+.section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.section h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: -.3px;
+  margin-bottom: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.section-intro {
+  margin: 16px 0 28px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* ─── OBJECTIVE CARDS ─── */
+.obj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.obj-card {
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.obj-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
+  margin-bottom: 6px;
+  letter-spacing: 1px;
+}
+.obj-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--white);
+  margin-bottom: 4px;
+}
+.obj-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* ─── CONCEPT BLOCK ─── */
+.concept {
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  position: relative;
+}
+.concept-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+.concept h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--white);
+  margin-bottom: 8px;
+}
+.concept p { font-size: 13px; color: var(--text); line-height: 1.7; }
+.concept-ref {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--dim);
+}
+.concept-ref span { color: var(--muted); }
+
+/* ─── AGENT CARDS ─── */
+.agent-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.agent-card {
+  border-radius: 12px;
+  border: 1px solid;
+  padding: 20px;
+}
+.agent-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.agent-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.agent-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--white);
+  line-height: 1.2;
+}
+.agent-role {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 3px;
+  opacity: .75;
+}
+.agent-service {
+  font-size: 11px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--muted);
+}
+.agent-service strong { color: var(--white); }
+.task-list { list-style: none; }
+.task-list li {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 0 4px 14px;
+  position: relative;
+  border-bottom: 1px solid rgba(255,255,255,.03);
+}
+.task-list li:last-child { border-bottom: none; }
+.task-list li::before {
+  content: '›';
+  position: absolute;
+  left: 0;
+  opacity: .5;
+}
+.agent-ref {
+  margin-top: 14px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--dim);
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* agent colors */
+.ac-blue   { border-color: rgba(74,158,218,.4);  background: rgba(74,158,218,.04); }
+.ac-blue   .agent-role, .ac-blue .agent-ref span   { color: var(--blue); }
+.ac-green  { border-color: rgba(61,186,110,.4);  background: rgba(61,186,110,.04); }
+.ac-green  .agent-role, .ac-green .agent-ref span  { color: var(--green); }
+.ac-orange { border-color: rgba(240,167,66,.4);  background: rgba(240,167,66,.04); }
+.ac-orange .agent-role, .ac-orange .agent-ref span { color: var(--orange); }
+.ac-purple { border-color: rgba(176,127,255,.4); background: rgba(176,127,255,.04); }
+.ac-purple .agent-role, .ac-purple .agent-ref span { color: var(--purple); }
+.ac-red    { border-color: rgba(240,96,96,.4);   background: rgba(240,96,96,.04); }
+.ac-red    .agent-role, .ac-red .agent-ref span    { color: var(--red); }
+.ac-yellow { border-color: rgba(255,209,102,.4); background: rgba(255,209,102,.04); }
+.ac-yellow .agent-role, .ac-yellow .agent-ref span { color: var(--yellow); }
+
+/* full-width agent card */
+.agent-card.full { grid-column: 1 / -1; }
+.agent-card.full .agent-header { margin-bottom: 8px; }
+.agent-card.full .task-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0 24px;
+}
+
+/* ─── INTERACTION TABLE ─── */
+.int-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 20px;
+}
+.int-table th {
+  text-align: left;
+  padding: 8px 14px;
+  background: var(--surf2);
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.int-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+.int-table tr:last-child td { border-bottom: none; }
+.int-table tr:hover td { background: rgba(255,255,255,.02); }
+.tag {
+  display: inline-block;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ─── FLOW STEPS ─── */
+.flow-container { position: relative; }
+.flow-step {
+  display: flex;
+  gap: 20px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.flow-step:last-child { border-bottom: none; }
+.flow-left {
+  flex-shrink: 0;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.flow-num {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 2px solid;
+}
+.flow-connector {
+  flex: 1;
+  width: 1px;
+  background: var(--border);
+  min-height: 20px;
+}
+.flow-right { flex: 1; padding-top: 4px; }
+.flow-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--white);
+  margin-bottom: 4px;
+}
+.flow-desc { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.flow-agents { display: flex; flex-wrap: wrap; gap: 6px; }
+.flow-code {
+  margin-top: 10px;
+  background: var(--surf2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--cyan);
+}
+.flow-code .comment { color: var(--dim); }
+.flow-code .kw { color: var(--purple); }
+.flow-code .str { color: var(--green); }
+
+/* ─── TRIGGER TABLE ─── */
+.trig-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.trig-card {
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.trig-type {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.trig-stack {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.trig-ref {
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--dim);
+}
+
+/* ─── CALLOUTS ─── */
+.callout {
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 20px 0;
+  border: 1px solid;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.callout strong { font-weight: 600; }
+.callout-blue   { border-color: rgba(74,158,218,.4);  background: rgba(74,158,218,.06);  color: #a8d4f0; }
+.callout-yellow { border-color: rgba(255,209,102,.4); background: rgba(255,209,102,.06); color: #f5dcaa; }
+.callout-red    { border-color: rgba(240,96,96,.4);   background: rgba(240,96,96,.06);   color: #f0a0a0; }
+.callout-green  { border-color: rgba(61,186,110,.4);  background: rgba(61,186,110,.06);  color: #90d4a8; }
+.callout-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  opacity: .8;
+}
+
+/* ─── CHECKLIST ─── */
+.checklist { list-style: none; margin: 16px 0; }
+.checklist li {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+.checklist li:last-child { border-bottom: none; }
+.check-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.checklist li .ref-inline {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--dim);
+  margin-left: auto;
+  flex-shrink: 0;
+  padding-top: 3px;
+}
+
+/* ─── GAP TABLE ─── */
+.gap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.gap-table th {
+  text-align: left;
+  padding: 8px 14px;
+  background: var(--surf2);
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.gap-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--text);
+}
+.gap-table tr:last-child td { border-bottom: none; }
+.status-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+/* ─── DISCUSSION ─── */
+.discussion-q {
+  background: var(--surf);
+  border-left: 3px solid var(--blue);
+  border-radius: 0 8px 8px 0;
+  padding: 14px 18px;
+  margin: 14px 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text);
+}
+
+/* ─── FOOTER ─── */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 32px 0;
+  text-align: center;
+  color: var(--dim);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.8;
+}
+
+/* ─── UTILS ─── */
+.mt8  { margin-top: 8px; }
+.mt16 { margin-top: 16px; }
+.mt24 { margin-top: 24px; }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+/* tag colors */
+.tg-blue   { background: rgba(74,158,218,.15);  color: var(--blue); }
+.tg-green  { background: rgba(61,186,110,.15);  color: var(--green); }
+.tg-orange { background: rgba(240,167,66,.15);  color: var(--orange); }
+.tg-purple { background: rgba(176,127,255,.15); color: var(--purple); }
+.tg-red    { background: rgba(240,96,96,.15);   color: var(--red); }
+.tg-yellow { background: rgba(255,209,102,.15); color: var(--yellow); }
+.tg-lime   { background: rgba(201,225,58,.15);  color: var(--lime); }
+.tg-muted  { background: rgba(110,118,129,.15); color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <span class="nav-brand">MLOps · Clase 05</span>
+  <a href="#objetivos"    class="nav-link">Objetivos</a>
+  <a href="#concepto"     class="nav-link">Conceptos</a>
+  <a href="#agentes"      class="nav-link">Agentes</a>
+  <a href="#interaccion"  class="nav-link">Interacción</a>
+  <a href="#flujo"        class="nav-link">Flujo</a>
+  <a href="#triggers"     class="nav-link">Triggers</a>
+  <a href="#hitl"         class="nav-link">Human-in-the-Loop</a>
+  <a href="#lab"          class="nav-link">Laboratorio</a>
+  <a href="#discusion"    class="nav-link">Discusión</a>
+</nav>
+
+<div class="page">
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-eyebrow">Clase 05 · Sistema Multi-Agente</div>
+  <h1>Diseño Multi-Agente<br>sobre un <span>Stack MLOps Real</span></h1>
+  <p class="cover-sub">
+    Cómo estructurar roles especializados como agentes autónomos coordinados, mapeados sobre los servicios Docker Compose que ya conocemos.
+  </p>
+  <div class="cover-meta">
+    <span class="pill pill-blue">Eken et al. (2025) §3.2.6 – §3.3</span>
+    <span class="pill pill-green">Stack Docker Compose</span>
+    <span class="pill pill-muted">GitHub Actions · MLflow · FastAPI · Evidently</span>
+  </div>
+</div>
+
+<!-- OBJETIVOS -->
+<section class="section" id="objetivos">
+  <div class="section-label">Parte 01</div>
+  <h2>Objetivos de la Clase</h2>
+  <p class="section-intro">
+    Al finalizar esta sesión podrás mapear cada rol MLOps identificado por Eken et al. a un agente concreto dentro de nuestro stack, entender sus responsabilidades, y razonar sobre el diseño de sus interacciones y ciclos de automatización.
+  </p>
+  <div class="obj-grid">
+    <div class="obj-card">
+      <div class="obj-num">OBJ 01</div>
+      <div class="obj-title">Conectar roles con agentes</div>
+      <div class="obj-desc">Mapear los roles de Eken et al. Fig. 3 (MLOE, DS, MLE, QAE, DOE) a agentes con responsabilidades concretas sobre servicios Docker.</div>
+    </div>
+    <div class="obj-card">
+      <div class="obj-num">OBJ 02</div>
+      <div class="obj-title">Entender la coordinación</div>
+      <div class="obj-desc">Comprender cómo el agente MLOE orquesta a los demás, incluyendo los cuatro tipos de pipeline triggers del paper.</div>
+    </div>
+    <div class="obj-card">
+      <div class="obj-num">OBJ 03</div>
+      <div class="obj-title">Razonar sobre Human-in-the-Loop</div>
+      <div class="obj-desc">Justificar por qué la automatización total no es siempre la respuesta óptima (Eken §5.2.5 Automation Dilemma).</div>
+    </div>
+    <div class="obj-card">
+      <div class="obj-num">OBJ 04</div>
+      <div class="obj-title">Identificar el ciclo de reentrenamiento</div>
+      <div class="obj-desc">Trazcar el flujo completo: drift → webhook → retrain → QA gate → approval → hot-swap, reconociendo cada agente involucrado.</div>
+    </div>
+  </div>
+</section>
+
+<!-- CONCEPTOS PREVIOS -->
+<section class="section" id="concepto">
+  <div class="section-label">Parte 02</div>
+  <h2>Marco Conceptual</h2>
+  <p class="section-intro">
+    El diseño multi-agente que vamos a estudiar no emerge del vacío: está fundamentado en tres conceptualizaciones de MLOps que el paper identifica como centrales.
+  </p>
+
+  <div class="concept">
+    <span class="concept-tag tg-blue">Definición 1</span>
+    <h3>MLOps-as-Pipeline-Automation</h3>
+    <p>MLOps como la práctica de automatizar las actividades repetitivas del ciclo de vida ML construyendo y gestionando pipelines automatizados. Los agentes son la realización concreta de esta automatización: cada agente automatiza un dominio específico del pipeline (entrenamiento, serving, calidad, monitoring).</p>
+    <div class="concept-ref">Eken et al. §3.1.3 — <span>34 estudios la identifican como definición primaria</span></div>
+  </div>
+
+  <div class="concept">
+    <span class="concept-tag tg-blue">Definición 2</span>
+    <h3>MLOps-as-Culture + Team Structure</h3>
+    <p>Desarrollar y operacionalizar un sistema ML-enabled requiere colaboración entre muchos roles distintos (business analysts, ML engineers, software engineers). La arquitectura multi-agente modela estructuralmente esta colaboración: cada agente representa un rol, y los mensajes entre agentes modelan la colaboración inter-equipos.</p>
+    <div class="concept-ref">Eken et al. §3.1.4, §4.1 — <span>18 estudios; clave: "MLOps engineers interact with every role" (PS105)</span></div>
+  </div>
+
+  <div class="concept">
+    <span class="concept-tag tg-blue">Definición 3</span>
+    <h3>Microservice Architecture como base del diseño</h3>
+    <p>La Arquitectura de Microservicios (MSA) demuestra alta escalabilidad con servicios independientemente escalables pero interconectados. Nuestro Docker Compose ya implementa este patrón: cada servicio tiene un dominio claro y se comunica por API. Los agentes son la capa de inteligencia que coordina estos microservicios.</p>
+    <div class="concept-ref">Eken et al. §5.3.2 — <span>PS119: MSA recomendada para MLOps platforms; PS111, PS126: modularización vía microservicios</span></div>
+  </div>
+
+  <div class="callout callout-blue">
+    <div class="callout-label">Conexión clave</div>
+    <strong>Docker Compose = Arquitectura de Microservicios.</strong> Cada servicio (mlflow, inference-api, drift-detector, nginx) es un microservicio independiente. Los agentes que diseñamos hoy son el siguiente nivel de abstracción: entidades con autonomía que <em>usan</em> estos microservicios para cumplir sus objetivos.
+  </div>
+</section>
+
+<!-- AGENTES -->
+<section class="section" id="agentes">
+  <div class="section-label">Parte 03</div>
+  <h2>Los Cinco Agentes del Sistema</h2>
+  <p class="section-intro">
+    Cada agente mapea a un rol de Eken et al. Fig. 3 y controla uno o más servicios concretos del stack Docker Compose.
+  </p>
+
+  <div class="agent-grid">
+
+    <!-- MLOE -->
+    <div class="agent-card ac-blue full">
+      <div class="agent-header">
+        <div class="agent-icon">🎛️</div>
+        <div>
+          <div class="agent-name">Agente Orquestador</div>
+          <div class="agent-role">MLOE — MLOps Engineer</div>
+        </div>
+      </div>
+      <div class="agent-service">
+        Servicio Docker: <strong>nginx :80</strong> + gestión de GitHub Actions workflows
+      </div>
+      <div class="task-cols">
+        <ul class="task-list">
+          <li>Coordina todos los demás agentes</li>
+          <li>Gestiona pipeline triggers (ci.yml, cd.yml, retrain.yml)</li>
+        </ul>
+        <ul class="task-list">
+          <li>Reverse proxy de tráfico de entrada</li>
+          <li>Mantiene estabilidad operacional del sistema</li>
+        </ul>
+        <ul class="task-list">
+          <li>Interviene cuando un agente falla o requiere escalación</li>
+          <li>Gestiona dependencias entre servicios</li>
+        </ul>
+      </div>
+      <div class="agent-ref">Eken §3.3 — <span>"MLOps engineers are responsible for building automated pipelines, maintaining operational stability of the entire ML system, and facilitating collaboration across roles" (PS106, PS116)</span></div>
+    </div>
+
+    <!-- DS -->
+    <div class="agent-card ac-green">
+      <div class="agent-header">
+        <div class="agent-icon">🔬</div>
+        <div>
+          <div class="agent-name">Agente Data Scientist</div>
+          <div class="agent-role">DS — Data Scientist</div>
+        </div>
+      </div>
+      <div class="agent-service">
+        Servicio: <strong>model-trainer</strong> + <strong>MLflow :5001</strong>
+      </div>
+      <ul class="task-list">
+        <li>Ejecuta experimentos de entrenamiento</li>
+        <li>Registra métricas, params e hiperparámetros en MLflow</li>
+        <li>Diseña y evalúa modelos candidatos</li>
+        <li>Promueve modelo a Staging en el Registry</li>
+        <li>Itera sobre el modelo si QA detecta problemas</li>
+      </ul>
+      <div class="agent-ref">Eken §3.3 — <span>"DS responsible for training, tuning, and evaluating models; ensure trackability of experiments, datasets, and models" (PS121, PS24)</span></div>
+    </div>
+
+    <!-- MLE -->
+    <div class="agent-card ac-orange">
+      <div class="agent-header">
+        <div class="agent-icon">⚙️</div>
+        <div>
+          <div class="agent-name">Agente ML Engineer</div>
+          <div class="agent-role">MLE — ML Engineer</div>
+        </div>
+      </div>
+      <div class="agent-service">
+        Servicio: <strong>inference-api :8000</strong> (FastAPI)
+      </div>
+      <ul class="task-list">
+        <li>Carga modelo Production desde MLflow Registry</li>
+        <li>Sirve predicciones vía POST /predict</li>
+        <li>Ejecuta hot-swap vía POST /reload sin downtime</li>
+        <li>Loggea predicciones a predictions.jsonl</li>
+        <li>Monitorea performance en producción</li>
+      </ul>
+      <div class="agent-ref">Eken §3.3 — <span>"MLE primary tasks: model optimization, deployment, and monitoring" (PS114, PS154)</span></div>
+    </div>
+
+    <!-- QAE -->
+    <div class="agent-card ac-purple">
+      <div class="agent-header">
+        <div class="agent-icon">🧪</div>
+        <div>
+          <div class="agent-name">Agente QA Engineer</div>
+          <div class="agent-role">QAE — Quality Assurance Engineer</div>
+        </div>
+      </div>
+      <div class="agent-service">
+        Servicio: <strong>test-runner</strong>
+      </div>
+      <ul class="task-list">
+        <li>Ejecuta tests unitarios sobre el modelo</li>
+        <li>Valida integración con inference-api</li>
+        <li>Verifica SLAs de latencia y accuracy</li>
+        <li>Actúa como puerta de control (gate) antes de producción</li>
+        <li>Notifica al orquestador MLOE si falla</li>
+      </ul>
+      <div class="agent-ref">Eken §3.2.8 — <span>"QAE responsible for testing software application and services to ensure product quality" (PS36); Application quality gate</span></div>
+    </div>
+
+    <!-- MON -->
+    <div class="agent-card ac-red">
+      <div class="agent-header">
+        <div class="agent-icon">📊</div>
+        <div>
+          <div class="agent-name">Agente Monitoring</div>
+          <div class="agent-role">MLOE + DOE — Monitoring / DevOps</div>
+        </div>
+      </div>
+      <div class="agent-service">
+        Servicio: <strong>drift-detector</strong> (Evidently AI)
+      </div>
+      <ul class="task-list">
+        <li>Lee predictions.jsonl periódicamente</li>
+        <li>Calcula data drift con PSI / KS test</li>
+        <li>Genera reporte HTML de observabilidad</li>
+        <li>Dispara webhook cuando consecutive ≥ 2</li>
+        <li>El webhook activa retrain.yml en GitHub Actions</li>
+      </ul>
+      <div class="agent-ref">Eken §3.2.6 — <span>"training can be triggered when concept drift is detected" (PS102); "leveraging events to detect and respond to model and data issues" §4.3</span></div>
+    </div>
+
+    <!-- HUMAN -->
+    <div class="agent-card ac-yellow">
+      <div class="agent-header">
+        <div class="agent-icon">👁️</div>
+        <div>
+          <div class="agent-name">Human-in-the-Loop</div>
+          <div class="agent-role">PM + MLOE — Punto de Intervención Humana</div>
+        </div>
+      </div>
+      <div class="agent-service">
+        No es un servicio Docker — es un punto deliberado de aprobación manual
+      </div>
+      <ul class="task-list">
+        <li>Revisa métricas de negocio del modelo candidato</li>
+        <li>Valida los drift reports de Evidently</li>
+        <li>Aprueba promoción de Staging → Production</li>
+        <li>Puede rechazar y retornar el ciclo al agente DS</li>
+      </ul>
+      <div class="agent-ref">Eken §5.2.5 — <span>"best practice for automation dilemma: automate tedious tasks and incorporate human feedback where possible" (PS110); Human-in-the-loop interventions</span></div>
+    </div>
+
+  </div><!-- /agent-grid -->
+</section>
+
+<!-- INTERACCIÓN -->
+<section class="section" id="interaccion">
+  <div class="section-label">Parte 04</div>
+  <h2>Matriz de Interacción entre Agentes</h2>
+  <p class="section-intro">
+    La siguiente tabla muestra qué agente inicia cada interacción, quién la recibe, el canal de comunicación y la sección del paper que la fundamenta.
+  </p>
+
+  <table class="int-table">
+    <thead>
+      <tr>
+        <th>Origen</th>
+        <th>Destino</th>
+        <th>Canal / Mecanismo</th>
+        <th>Qué se transfiere</th>
+        <th>Ref. Eken</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="tag tg-lime">CI/CD</span></td>
+        <td><span class="tag tg-purple">QAE</span></td>
+        <td class="mono">ci.yml → docker run test-runner</td>
+        <td>Ejecuta suite de tests sobre el stack</td>
+        <td class="mono" style="color:var(--dim)">§3.2.8</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-purple">QAE</span></td>
+        <td><span class="tag tg-blue">MLOE</span></td>
+        <td class="mono">exit code → GitHub Actions status</td>
+        <td>OK continúa pipeline; FAIL detiene deployment</td>
+        <td class="mono" style="color:var(--dim)">§3.2.8</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-lime">CI/CD</span></td>
+        <td><span class="tag tg-green">DS</span></td>
+        <td class="mono">retrain.yml → docker run model-trainer</td>
+        <td>Trigger de reentrenamiento con nuevos datos</td>
+        <td class="mono" style="color:var(--dim)">§3.2.6 PS42</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-green">DS</span></td>
+        <td><span class="tag tg-blue">MLOE</span></td>
+        <td class="mono">MLflow Registry → Staging stage</td>
+        <td>Modelo candidato registrado con métricas</td>
+        <td class="mono" style="color:var(--dim)">§3.2.7</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-purple">QAE</span></td>
+        <td><span class="tag tg-yellow">HUMAN</span></td>
+        <td class="mono">Tests OK → aprobación manual requerida</td>
+        <td>Reporte de validación del modelo candidato</td>
+        <td class="mono" style="color:var(--dim)">§5.2.5</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-yellow">HUMAN</span></td>
+        <td><span class="tag tg-blue">MLOE (Registry)</span></td>
+        <td class="mono">MLflow UI → Promote to Production</td>
+        <td>Modelo promovido; MLOE notifica a MLE</td>
+        <td class="mono" style="color:var(--dim)">§5.2.5 PS110</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-blue">MLOE</span></td>
+        <td><span class="tag tg-orange">MLE</span></td>
+        <td class="mono">POST http://inference-api:8000/reload</td>
+        <td>Instrucción de hot-swap del modelo en serving</td>
+        <td class="mono" style="color:var(--dim)">§3.2.5 PS111</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-orange">MLE</span></td>
+        <td><span class="tag tg-red">MON</span></td>
+        <td class="mono">predictions.jsonl (shared volume)</td>
+        <td>Log continuo de predicciones para análisis de drift</td>
+        <td class="mono" style="color:var(--dim)">§4.3</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-red">MON</span></td>
+        <td><span class="tag tg-lime">CI/CD</span></td>
+        <td class="mono">POST webhook → retrain.yml dispatch</td>
+        <td>Señal de drift detectado; inicia ciclo de reentrenamiento</td>
+        <td class="mono" style="color:var(--dim)">§3.2.6 PS102</td>
+      </tr>
+      <tr>
+        <td><span class="tag tg-red">MON</span></td>
+        <td><span class="tag tg-yellow">HUMAN</span></td>
+        <td class="mono">HTML Drift Report (Evidently)</td>
+        <td>Reporte visual de distribución para revisión humana</td>
+        <td class="mono" style="color:var(--dim)">§4.3</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-green">
+    <div class="callout-label">Patrón arquitectural</div>
+    Cada interacción usa un canal diferente: archivos compartidos (JSONL), APIs REST (HTTP), variables de entorno (GitHub Actions), o la UI de MLflow. Esto refleja la naturaleza <strong>heterogénea de las integraciones MLOps</strong> que el paper identifica como desafío (§5.1.2 Pipeline Fragmentation).
+  </div>
+</section>
+
+<!-- FLUJO COMPLETO -->
+<section class="section" id="flujo">
+  <div class="section-label">Parte 05</div>
+  <h2>Flujo Completo del Sistema</h2>
+  <p class="section-intro">
+    El ciclo de vida completo, desde un push de código hasta el hot-swap del modelo en producción, pasando por el loop de reentrenamiento automático.
+  </p>
+
+  <div class="flow-container">
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--lime);color:var(--lime)">01</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">Desarrollador hace push a GitHub</div>
+        <div class="flow-desc">Un cambio en el código (nuevo feature, fix, actualización de modelo) es comiteado y pusheado al repositorio. GitHub Actions detecta el evento y dispara ci.yml en el self-hosted runner.</div>
+        <div class="flow-agents">
+          <span class="tag tg-lime">CI/CD trigger</span>
+          <span class="tag tg-muted">GitHub webhook</span>
+        </div>
+        <div class="flow-code">
+          <span class="comment"># .github/workflows/ci.yml</span><br>
+          <span class="kw">on</span>: [push, pull_request]<br>
+          <span class="kw">jobs</span>:<br>
+          &nbsp;&nbsp;build-and-test:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">runs-on</span>: self-hosted
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--purple);color:var(--purple)">02</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">QA Gate: Agente QAE valida el stack</div>
+        <div class="flow-desc">El agente QAE ejecuta test-runner sobre el stack actual. Corre tests unitarios e integración. Si algún test falla, el pipeline se detiene y el agente MLOE recibe notificación. Si todos pasan, el pipeline continúa.</div>
+        <div class="flow-agents">
+          <span class="tag tg-purple">QAE activo</span>
+          <span class="tag tg-blue">MLOE recibe resultado</span>
+        </div>
+        <div class="flow-code">
+          <span class="comment"># En ci.yml</span><br>
+          - <span class="kw">name</span>: <span class="str">Run QA Suite</span><br>
+          &nbsp;&nbsp;<span class="kw">run</span>: docker compose run --rm test-runner
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--blue);color:var(--blue)">03</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">Deploy: Agente MLOE actualiza el stack</div>
+        <div class="flow-desc">cd.yml actualiza los servicios Docker Compose. El agente MLOE (nginx) empieza a enrutar el nuevo tráfico. El agente MLE (inference-api) carga el modelo actual desde MLflow Registry.</div>
+        <div class="flow-agents">
+          <span class="tag tg-blue">MLOE coordina</span>
+          <span class="tag tg-orange">MLE carga modelo</span>
+          <span class="tag tg-lime">CI/CD ejecuta</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--orange);color:var(--orange)">04</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">Producción: Agente MLE sirve predicciones</div>
+        <div class="flow-desc">La inference-api recibe peticiones de usuarios vía nginx. Cada predicción queda registrada en predictions.jsonl en un volumen compartido. Este archivo es la entrada del agente de monitoring.</div>
+        <div class="flow-agents">
+          <span class="tag tg-orange">MLE activo</span>
+          <span class="tag tg-muted">usuarios externos</span>
+        </div>
+        <div class="flow-code">
+          POST /predict → modelo carga features → retorna clase + probabilidad<br>
+          → append a <span class="str">predictions.jsonl</span> (shared volume)
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--red);color:var(--red)">05</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">Monitoring: Agente MON detecta drift</div>
+        <div class="flow-desc">El drift-detector analiza periódicamente la distribución de features en predictions.jsonl comparada con los datos de referencia (training set). Evidently calcula métricas de drift. Genera reporte HTML visible para el humano.</div>
+        <div class="flow-agents">
+          <span class="tag tg-red">MON activo</span>
+          <span class="tag tg-yellow">HUMAN recibe reporte</span>
+        </div>
+        <div class="flow-code">
+          <span class="comment"># Ciclo de detección</span><br>
+          --- Cycle N (drift_phase=True) ---<br>
+          &nbsp;&nbsp;Data drift: True &nbsp;features=['petal length (cm)']<br>
+          &nbsp;&nbsp;Consecutive: <span class="str">2/2</span> → 🔁 RETRAINING TRIGGERED
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--red);color:var(--red)">06</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">Trigger automático: webhook → retrain.yml</div>
+        <div class="flow-desc">Cuando drift consecutivo ≥ 2, el agente MON hace un POST al endpoint webhook de GitHub Actions. Esto dispara retrain.yml en el self-hosted runner, que a su vez activa el agente DS.</div>
+        <div class="flow-agents">
+          <span class="tag tg-red">MON dispara</span>
+          <span class="tag tg-lime">CI/CD recibe</span>
+        </div>
+        <div class="flow-code">
+          <span class="comment"># En drift_detector.py</span><br>
+          <span class="kw">if</span> consecutive_drift &gt;= threshold:<br>
+          &nbsp;&nbsp;requests.post(GITHUB_WEBHOOK_URL, json={<span class="str">"event_type"</span>: <span class="str">"retrain"</span>})
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--green);color:var(--green)">07</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">Reentrenamiento: Agente DS entrena nuevo modelo</div>
+        <div class="flow-desc">retrain.yml ejecuta model-trainer. El agente DS entrena una nueva versión del modelo con datos actualizados, registra el run en MLflow con todas sus métricas, y lo promueve a Staging en el Registry.</div>
+        <div class="flow-agents">
+          <span class="tag tg-green">DS activo</span>
+          <span class="tag tg-blue">MLOE observa</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--purple);color:var(--purple)">08</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">QA Gate del nuevo modelo</div>
+        <div class="flow-desc">El agente QAE valida el nuevo modelo candidato. Si los tests pasan, el resultado va al punto de revisión humana. Si fallan, el ciclo vuelve al agente DS.</div>
+        <div class="flow-agents">
+          <span class="tag tg-purple">QAE gate</span>
+          <span class="tag tg-green">DS itera si falla</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--yellow);color:var(--yellow)">09</div>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">Human Approval: revisión y aprobación</div>
+        <div class="flow-desc">Un humano (PM o MLOE) revisa las métricas del nuevo modelo en MLflow, compara con el modelo champion actual, y evalúa el drift report de Evidently. Si aprueba, promueve el modelo a Production en el Registry.</div>
+        <div class="flow-agents">
+          <span class="tag tg-yellow">HUMAN decide</span>
+          <span class="tag tg-blue">MLOE Registry</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num" style="border-color:var(--orange);color:var(--orange)">10</div>
+      </div>
+      <div class="flow-right">
+        <div class="flow-title">Hot-swap: Agente MLE carga el nuevo modelo</div>
+        <div class="flow-desc">El agente MLOE notifica al agente MLE que hay un nuevo modelo en Production. La inference-api ejecuta POST /reload, descarga el nuevo modelo desde MLflow Registry y lo carga en memoria sin reiniciar el servidor ni perder disponibilidad.</div>
+        <div class="flow-agents">
+          <span class="tag tg-orange">MLE actualiza</span>
+          <span class="tag tg-blue">MLOE coordina</span>
+        </div>
+        <div class="flow-code">
+          <span class="comment"># Hot-swap sin downtime</span><br>
+          curl -X POST http://localhost:8000/reload<br>
+          <span class="str">→ {"status": "reloaded", "version": "v3", "stage": "Production"}</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /flow-container -->
+</section>
+
+<!-- TRIGGERS -->
+<section class="section" id="triggers">
+  <div class="section-label">Parte 06</div>
+  <h2>Los Cuatro Tipos de Pipeline Triggers</h2>
+  <p class="section-intro">
+    Eken et al. §3.2.6 identifica cuatro tipos de triggers para la automatización de pipelines. Nuestro stack implementa los cuatro.
+  </p>
+
+  <div class="trig-grid">
+    <div class="trig-card">
+      <div class="trig-type" style="color:var(--lime)">⚡ Secuencial (Sequential)</div>
+      <div class="trig-stack">Una tarea dispara la siguiente al completarse. <br>
+        <strong>En nuestro stack:</strong> model-trainer completa → modelo en Staging → QA gate → Human approval → MLE hot-swap.</div>
+      <div class="trig-ref">PS42 — "executing a task upon the previous task's completion"</div>
+    </div>
+    <div class="trig-card">
+      <div class="trig-type" style="color:var(--cyan)">🕐 Periódico (Periodical)</div>
+      <div class="trig-stack">Ejecución según un schedule pre-programado.<br>
+        <strong>En nuestro stack:</strong> drift-detector analiza predictions.jsonl cada N segundos/minutos de forma continua.</div>
+      <div class="trig-ref">PS25 — "executing according to a pre-scheduled period"</div>
+    </div>
+    <div class="trig-card">
+      <div class="trig-type" style="color:var(--red)">🎯 Event-driven</div>
+      <div class="trig-stack">Un evento en el sistema dispara el siguiente paso.<br>
+        <strong>En nuestro stack:</strong> drift consecutivo ≥ 2 → webhook POST → retrain.yml se activa automáticamente en GitHub Actions.</div>
+      <div class="trig-ref">PS102, PS147 — "triggered when concept drift is detected"</div>
+    </div>
+    <div class="trig-card">
+      <div class="trig-type" style="color:var(--orange)">📉 Por Degradación (Performance)</div>
+      <div class="trig-stack">Degradación de métricas dispara una acción de recuperación.<br>
+        <strong>En nuestro stack:</strong> Evidently detecta degradación estadística en la distribución de features → inicia ciclo de reentrenamiento.</div>
+      <div class="trig-ref">PS140 — "training triggered when model performance is reduced"</div>
+    </div>
+  </div>
+
+  <div class="callout callout-blue">
+    <div class="callout-label">Pregunta de diseño</div>
+    ¿Por qué usar <strong>consecutive ≥ 2</strong> como threshold para el trigger de reentrenamiento, en lugar de disparar en el primer ciclo con drift? Pista: piensa en falsos positivos y en el costo de un reentrenamiento innecesario.
+  </div>
+</section>
+
+<!-- HUMAN IN THE LOOP -->
+<section class="section" id="hitl">
+  <div class="section-label">Parte 07</div>
+  <h2>Human-in-the-Loop: El Dilema de la Automatización</h2>
+  <p class="section-intro">
+    Eken et al. §5.2.5 identifica el "Automation Decision Dilemma" como un desafío central en la adopción de MLOps. No todo debe automatizarse.
+  </p>
+
+  <div class="concept">
+    <span class="concept-tag tg-yellow">Eken §5.2.5 — Automation Decision Dilemma</span>
+    <h3>¿Por qué no automatizar la aprobación de modelos?</h3>
+    <p>Aunque los practicantes tienden a automatizar donde sea posible, el ciclo de vida ML contiene actividades donde el feedback humano es crucial y la automatización total puede crear impactos negativos, especialmente considerando las prácticas de IA responsable. La mejor práctica propuesta es <strong>automatizar tareas tediosas e incorporar feedback humano donde sea posible</strong> (PS110).</p>
+    <div class="concept-ref">PS110 (Databricks) — <span>Citado explícitamente como best practice para el dilema de automatización</span></div>
+  </div>
+
+  <div class="mt24">
+    <p style="margin-bottom:14px;font-size:13px;color:var(--muted);">En nuestro sistema, el Human-in-the-Loop tiene responsabilidades que los agentes no pueden asumir solos:</p>
+    <table class="int-table">
+      <thead>
+        <tr>
+          <th>Decisión</th>
+          <th>¿Por qué requiere humano?</th>
+          <th>Riesgo si se automatiza</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Aprobar nuevo modelo a Production</td>
+          <td>Requiere juicio sobre impacto de negocio, no solo métricas técnicas</td>
+          <td>Un modelo técnicamente mejor puede violar requisitos regulatorios o de negocio</td>
+        </tr>
+        <tr>
+          <td>Validar drift reports</td>
+          <td>El contexto de negocio puede explicar el drift (campaña estacional, etc.)</td>
+          <td>Reentrenamiento innecesario con datos no representativos del futuro</td>
+        </tr>
+        <tr>
+          <td>Decidir rollback</td>
+          <td>Requiere analizar si el problema es del modelo o del sistema/datos</td>
+          <td>Rollback automático puede crear ciclos de degradación en cascada</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-yellow mt16">
+    <div class="callout-label">Punto de discusión</div>
+    El paper menciona que la ausencia de frameworks de análisis de impacto es una brecha de investigación actual. ¿Cómo diseñarías un criterio objetivo para que el sistema <em>sugiera</em> al humano aprobar o rechazar, sin tomar la decisión final?
+  </div>
+</section>
+
+<!-- LAB -->
+<section class="section" id="lab">
+  <div class="section-label">Parte 08</div>
+  <h2>Laboratorio: Trazar el Flujo de un Agente</h2>
+  <p class="section-intro">
+    Trabajando en grupos de 2–3 personas, mapeen uno de los siguientes escenarios sobre el diagrama del sistema multi-agente.
+  </p>
+
+  <div class="obj-grid">
+    <div class="obj-card">
+      <div class="obj-num">Escenario A</div>
+      <div class="obj-title">PR con mejora de features</div>
+      <div class="obj-desc">Un Data Scientist hace push de un nuevo feature engineering. Tracen todos los agentes involucrados desde el push hasta que la nueva versión sirve predicciones.</div>
+    </div>
+    <div class="obj-card">
+      <div class="obj-num">Escenario B</div>
+      <div class="obj-title">QA Gate falla</div>
+      <div class="obj-desc">El test-runner detecta que la accuracy del nuevo modelo cayó 5% respecto al modelo anterior. ¿Qué agente recibe la notificación? ¿Qué pasos siguen?</div>
+    </div>
+    <div class="obj-card">
+      <div class="obj-num">Escenario C</div>
+      <div class="obj-title">Drift detectado en producción</div>
+      <div class="obj-desc">Después de 2 ciclos consecutivos con drift en petal_width, el webhook se dispara. Tracen el ciclo completo hasta el hot-swap del nuevo modelo. ¿Dónde interviene el humano?</div>
+    </div>
+    <div class="obj-card">
+      <div class="obj-num">Escenario D — Diseño</div>
+      <div class="obj-title">Agregar un Agente de Seguridad</div>
+      <div class="obj-desc">El paper menciona Security Experts como rol (§3.3). ¿Cómo agregarían un agente de seguridad al sistema? ¿Qué servicio Docker usaría? ¿Qué interacciones tendría con MLOE, QAE y MLE?</div>
+    </div>
+  </div>
+
+  <div class="mt24">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Checklist de entregable por grupo:</p>
+    <ul class="checklist">
+      <li><div class="check-box"></div>Identificar todos los agentes involucrados en el escenario<span class="ref-inline">OBJ 01</span></li>
+      <li><div class="check-box"></div>Describir el canal de comunicación entre cada par de agentes<span class="ref-inline">OBJ 02</span></li>
+      <li><div class="check-box"></div>Identificar al menos un pipeline trigger del paper presente en el escenario<span class="ref-inline">§3.2.6</span></li>
+      <li><div class="check-box"></div>Señalar el punto de Human-in-the-Loop (si existe en su escenario)<span class="ref-inline">§5.2.5</span></li>
+      <li><div class="check-box"></div>Identificar qué artifact se crea o transforma en el flujo<span class="ref-inline">§3.2.7</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- DISCUSIÓN -->
+<section class="section" id="discusion">
+  <div class="section-label">Parte 09</div>
+  <h2>Preguntas de Discusión</h2>
+  <p class="section-intro">
+    Estas preguntas conectan el diseño práctico del sistema con las brechas y debates que el paper identifica explícitamente.
+  </p>
+
+  <div class="discussion-q">
+    1. Eken et al. §5.3.2 señala que la arquitectura monolítica "considerably impacts the scalability of a system" y que MSA "demonstrated high scalability with independently scalable but interconnected services". ¿Cuál de nuestros cinco agentes sería el cuello de botella más crítico bajo alta carga? ¿Cómo lo resolverías?
+  </div>
+
+  <div class="discussion-q">
+    2. El paper identifica como brecha de investigación que "existing literature does not provide a structured approach" para el automation dilemma (§5.2.5). En nuestro sistema, el Human-in-the-Loop es manual. ¿Qué métricas concretas diseñarías para crear una recomendación automática que asista al humano en la decisión de promover un modelo?
+  </div>
+
+  <div class="discussion-q">
+    3. Eken et al. §5.2.3 menciona "silent failures caused by data quality issues" como uno de los principales riesgos en pipelines a escala. ¿Qué agente de nuestro sistema es más vulnerable a fallar silenciosamente? ¿Qué mecanismo de alerta agregarías?
+  </div>
+
+  <div class="discussion-q">
+    4. El paper (PS179) propone "a software agent that pulls and feeds data to containerized ML code" para abstraer la adquisición de datos. En nuestro stack actual, ¿quién cumple ese rol implícitamente? ¿Cómo lo convertirías en un agente explícito con su propio servicio Docker?
+  </div>
+
+  <div class="callout callout-red mt16">
+    <div class="callout-label">Brecha del paper relevante</div>
+    Eken et al. no identifica en su corpus ningún paper que trate la <strong>sostenibilidad ambiental como objetivo primario de MLOps</strong>. En un sistema multi-agente real, ¿qué tipo de agente podría monitorear y optimizar el consumo energético del stack (GPU hours, container resources) como primera clase de la arquitectura?
+  </div>
+</section>
+
+<!-- RESUMEN -->
+<section class="section">
+  <div class="section-label">Resumen</div>
+  <h2>Lo que cubrimos hoy</h2>
+
+  <table class="gap-table">
+    <thead>
+      <tr>
+        <th>Concepto</th>
+        <th>Implementación en el Stack</th>
+        <th>Referencia Eken</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Roles → Agentes</strong><br><span style="color:var(--muted);font-size:11px">MLOE, DS, MLE, QAE, DOE</span></td>
+        <td>nginx, model-trainer, inference-api, test-runner, drift-detector</td>
+        <td class="mono" style="color:var(--dim)">§3.3 + Fig. 3</td>
+      </tr>
+      <tr>
+        <td><strong>Pipeline Triggers</strong><br><span style="color:var(--muted);font-size:11px">4 tipos</span></td>
+        <td>ci.yml secuencial, drift schedule periódico, webhook event-driven, Evidently por degradación</td>
+        <td class="mono" style="color:var(--dim)">§3.2.6</td>
+      </tr>
+      <tr>
+        <td><strong>Artifact Management</strong></td>
+        <td>MLflow Registry con stages Staging/Production + versioning automático</td>
+        <td class="mono" style="color:var(--dim)">§3.2.7</td>
+      </tr>
+      <tr>
+        <td><strong>MSA como base</strong></td>
+        <td>Docker Compose = servicios independientes e interconectados vía mlops-net</td>
+        <td class="mono" style="color:var(--dim)">§5.3.2 PS119</td>
+      </tr>
+      <tr>
+        <td><strong>Human-in-the-Loop</strong></td>
+        <td>Punto deliberado de aprobación manual antes de promover a Production</td>
+        <td class="mono" style="color:var(--dim)">§5.2.5 PS110</td>
+      </tr>
+      <tr>
+        <td><strong>Ciclo de Reentrenamiento</strong></td>
+        <td>drift → webhook → retrain.yml → DS → QA gate → HUMAN → MLE hot-swap</td>
+        <td class="mono" style="color:var(--dim)">§3.2.6 PS102</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div><!-- /page -->
+
+<footer>
+  Clase 05 · Sistema Multi-Agente MLOps<br>
+  Basado en: Eken, B. et al. (2025). "A Multivocal Review of MLOps Practices, Challenges and Open Issues"<br>
+  ACM Computing Surveys, Vol. 58, No. 2, Article 39 · https://doi.org/10.1145/3747346<br>
+  Stack: Docker Compose · MLflow · FastAPI · Evidently AI · nginx · GitHub Actions (self-hosted)
+</footer>
+
+<script>
+// Active nav on scroll
+const links = document.querySelectorAll('.nav-link');
+const sections = document.querySelectorAll('.section[id]');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const a = document.querySelector(`.nav-link[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>
