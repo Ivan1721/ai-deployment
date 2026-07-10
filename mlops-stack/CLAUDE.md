@@ -49,7 +49,7 @@ docker compose up -d mlflow
 docker compose run --rm model-trainer
 docker compose up -d inference-api nginx
 
-# Run full QA suite (4 test levels)
+# Run full QA suite (6 test levels)
 docker compose run --rm test-runner
 
 # Run a single test file
@@ -77,9 +77,11 @@ curl -k -X POST https://localhost/api/reload \
 # Watch drift detector logs
 docker compose logs -f drift-detector
 
-# Lint (matches CI)
+# Lint (matches CI — note: CI runs this with `|| true`, so it is informational
+# and never blocks; the aligned-assignment style triggers E221 on purpose)
 flake8 model-trainer/train.py inference-api/app.py drift-detector/detector.py \
   tests/run_tests.py tests/test_data.py tests/test_model.py tests/test_api.py \
+  tests/test_model_slices.py tests/test_api_contract.py \
   --max-line-length=110 --extend-ignore=E501,W503
 ```
 
@@ -131,7 +133,9 @@ To switch to Iris classification mode, change `MODEL_CONFIG` in docker-compose.y
 | `inference-api` | 8000 | unless-stopped | FastAPI; loads all 8 Production models at startup. Exposes `/metrics` for Prometheus |
 | `drift-detector` | 9091 | unless-stopped | Background loop; KS tests + performance drift every 30s. Exposes Prometheus metrics on :9091 |
 | `test-runner` | — | no | QA suite; invoked manually or from CI |
-| `nginx` | 80, 443 | unless-stopped | Reverse proxy — HTTP→HTTPS redirect, TLS termination, /grafana/ proxy |
+| `nginx` | 80, 443 | unless-stopped | Reverse proxy — HTTP→HTTPS redirect, TLS termination; routes /mlflow/ (SSO-gated), /api/, /grafana/ |
+| `keycloak` | 8080 (localhost) | unless-stopped | OIDC identity provider (realm `mlops`) for browser SSO on /mlflow/ |
+| `oauth2-proxy` | 4180 (localhost) | unless-stopped | nginx `auth_request` backend — enforces Keycloak login for /mlflow/ |
 | `prometheus` | 9090 | unless-stopped | Scrapes inference-api:8000/metrics and drift-detector:9091 every 15s, retains 30d |
 | `grafana` | 3000 | unless-stopped | Dashboards auto-provisioned from grafana/; accessible at https://localhost/grafana/ |
 
@@ -192,12 +196,14 @@ After `CONSECUTIVE_DRIFT_WINDOWS=2` consecutive windows with drift, calls `retra
 | R² (hold-out) | ≥ 0.70 | `GATE_MIN_R2` |
 | sMAPE | < 20% | `GATE_MAX_SMAPE` |
 | API latency | < 500ms | `GATE_MAX_LATENCY_MS` |
+| R² per slice (activity / worker group) | ≥ 0.50 | `GATE_MIN_R2_SLICE` |
+| R² gap between scenarios (same target) | ≤ 0.25 | `GATE_MAX_R2_GAP` |
 
 sMAPE is used instead of MAPE because some targets (`TotalWorkload` in `WithRobot` scenario) can be 0, causing MAPE to be `inf`.
 
 ### Test Suite (`tests/`)
 
-Orchestrated by `run_tests.py` (4 levels run in sequence):
+Orchestrated by `run_tests.py` (6 levels run in sequence — every level is a hard gate; a failure blocks promotion):
 
 | Level | File | What it validates |
 |---|---|---|
@@ -205,6 +211,10 @@ Orchestrated by `run_tests.py` (4 levels run in sequence):
 | 2 | `test_model.py` | All 8 models: R² ≥ 0.70, sMAPE < 20%, metrics logged in MLflow, `feature_ranking.json` artifact present |
 | 3 | `test_api.py` | HTTP 200, schema, non-negative predictions, latency < 500ms |
 | 4 | `test_performance_drift.py` | Drift detector logic (unit tests) |
+| 5 | `test_model_slices.py` | Per-slice R² ≥ 0.50 on every activity and worker group (low/medium/high), R² gap between scenarios ≤ 0.25, monotonicity (more workers → more production). Catches sub-group bias hidden by the aggregate R² |
+| 6 | `test_api_contract.py` | Frozen JSON schema of all 6 endpoints (field names, types, required/optional) plus value-level checks — detects breaking API changes before consumers do |
+
+Levels 3, 4 and 6 skip gracefully when `inference-api` is not reachable. A summary run is logged to the `quality-assurance` MLflow experiment.
 
 ### Security
 

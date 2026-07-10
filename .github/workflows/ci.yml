@@ -29,6 +29,8 @@ jobs:
                  mlops-stack/tests/test_data.py \
                  mlops-stack/tests/test_model.py \
                  mlops-stack/tests/test_api.py \
+                 mlops-stack/tests/test_model_slices.py \
+                 mlops-stack/tests/test_api_contract.py \
             --max-line-length=110 \
             --extend-ignore=E501,W503 \
             --statistics || true

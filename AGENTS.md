@@ -23,7 +23,7 @@ Python code uses 4-space indentation and clear, module-level separation by servi
 
 ## Testing Guidelines
 
-Tests use Python test files under `mlops-stack/tests/`, named `test_*.py`. Add focused tests near the affected area: data schema checks in `test_data.py`, model quality gates in `test_model.py`, API behavior in `test_api.py`, and drift logic in `test_performance_drift.py`. The quality gates include minimum R2, maximum sMAPE, and API latency thresholds configured in `docker-compose.yml`.
+Tests use Python test files under `mlops-stack/tests/`, named `test_*.py`. Add focused tests near the affected area: data schema checks in `test_data.py`, model quality gates in `test_model.py`, API behavior in `test_api.py`, drift logic in `test_performance_drift.py`, per-slice model consistency in `test_model_slices.py`, and frozen endpoint schemas in `test_api_contract.py`. The quality gates include minimum R2 (global and per-slice), maximum sMAPE, maximum R2 gap between scenarios, and API latency thresholds configured in `docker-compose.yml`. New test files must also be added to `tests/Dockerfile` (COPY), wired into `tests/run_tests.py` as a gate, and listed in the CI flake8 step.
 
 ## Commit & Pull Request Guidelines
 
