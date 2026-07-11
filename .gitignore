@@ -1,0 +1,12 @@
+# Windows/WSL metadata
+*Zone.Identifier
+
+# LaTeX build artifacts (paper/)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+paper/*.log
