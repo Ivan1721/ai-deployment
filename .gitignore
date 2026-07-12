@@ -10,3 +10,8 @@
 *.out
 *.synctex.gz
 paper/*.log
+
+# Paper drafts and heavy binary assets (PDFs, .ai sources, IEEE template zip) —
+# kept locally, not tracked in git to avoid repo bloat
+/paper/
+IEEE_Conference_Template__JFC_.zip
