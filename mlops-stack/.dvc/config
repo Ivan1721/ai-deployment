@@ -2,3 +2,6 @@
     remote = local-store
 ['remote "local-store"']
     url = /opt/mlops-dvc-store
+['remote "gdriveremote"']
+    url = gdrive://1FW0YhSY77YSij1U8vplap4JpLui2mykK
+    gdrive_client_id = 115691384548-rt6lk7mva1he4l91f06d0ifcv4brqn70.apps.googleusercontent.com
