@@ -13,8 +13,13 @@ outside that directory.
   `cd.yml`, `retrain.yml`, all `runs-on: self-hosted`). The copies under
   `mlops-stack/.github/workflows/` are synced for reference only; GitHub does
   not execute them.
-- `paper/` — IEEE conference paper in progress (`conference_101719.tex`,
-  IEEEtran class, architecture/flowchart figures). Not tracked by git yet.
+- `paper/` — IEEE conference paper draft (`conference_101719.tex`, IEEEtran,
+  Spanish, ~8 pp compiled). Grounded in the companion Biosystems Engineering
+  manuscript (ANOVA tipo II + 12-model tournament); Figure 1 is
+  `hri_pipeline_v4.pdf` — the 5-stage pipeline diagram whose red Stage 5 is
+  the MLOps deployment (source: `hri_pipeline_v4.svg`, editable in
+  Illustrator). Intentionally gitignored (`/paper/` in `.gitignore`) to avoid
+  repo bloat — exists only on disk.
 - Top-level docs from the P0 security-hardening pass:
   `SECURITY_ASSESSMENT.md`, `CHANGES_P0_SECURITY.md`, `DEPLOYMENT_GUIDE_P0.md`,
   `QUICK_START_P0.md` — read these when touching auth/TLS/networking.

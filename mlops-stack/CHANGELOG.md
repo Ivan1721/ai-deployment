@@ -2,6 +2,34 @@
 
 ---
 
+## Validación end-to-end del stack  |  2026-07-13
+
+Sesión de arranque y validación completa: 9 servicios de larga vida arriba (healthchecks en `healthy`), 8 modelos `Production` servidos, smoke tests OK (predict vía nginx+TLS+API key, `/models` genérico, SSO 302 en `/mlflow/`, Grafana 302, 2 targets `up` en Prometheus).
+
+### Resultados de la pirámide QA (corrida completa)
+
+| Nivel | Resultado |
+|---|---|
+| 1 · data | ✓ PASS (28/28) |
+| 2 · model | ✓ PASS (82/82) |
+| 3 · api | ✗ 36/37 — `GET /models/{name}` inexistente → 503 en vez de 404 |
+| 4 · performance_drift | ✗ 16/19 — falsos positivos (`rmse`/`mae`) sobre datos estables |
+| 5 · model_slices | ✗ 60/61 — sesgo `WithRobot-AvgProduction`, solo `harv_ladder` (R²=0.00) |
+| 6 · api_contract | ✓ PASS (26/26) |
+
+- El hallazgo (iii) se **redujo**: `harv_ground` (antes R²=0.21) ya supera el gate — un champion más reciente del ciclo champion/challenger lo corrigió; persiste `harv_ladder`.
+- **Hallazgo nuevo (iv)**: `tests/entrypoint.sh` reescribe las URLs de servicio hacia la IP del gateway Docker, patrón roto desde que los puertos publicados quedaron en `127.0.0.1` (hardening P0). Afecta también el paso de QA en CI. Workaround y fix propuesto en `CLAUDE.md` → Known findings / Troubleshooting.
+
+### Incidencias resueltas durante el arranque
+
+| Incidencia | Causa | Resolución |
+|---|---|---|
+| `docker compose build` → `error getting credentials` | Credential helper de Docker Desktop falla vía interop WSL | Servicios levantados con `--no-build` (imágenes ya existentes) |
+| oauth2-proxy crash loop (`Realm does not exist`) y nginx (`host not found in upstream`) | Realm `mlops` ausente (volumen `keycloak-data` limpiado en algún momento) | `setup-keycloak.sh` + rotación de `OAUTH2_CLIENT_SECRET` en `.env` + recreación de oauth2-proxy/nginx |
+| test-runner `MLFlow not reachable` | Hallazgo (iv) | Suite ejecutada con IPs internas de los contenedores |
+
+---
+
 ## Block 4 — Generic Inference API + Multi-Experiment  |  2026-06-18
 
 ### Gap 1 — API genérica `POST /models/{name}/predict`

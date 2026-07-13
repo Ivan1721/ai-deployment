@@ -25,6 +25,8 @@ Python code uses 4-space indentation and clear, module-level separation by servi
 
 Tests use Python test files under `mlops-stack/tests/`, named `test_*.py`. Add focused tests near the affected area: data schema checks in `test_data.py`, model quality gates in `test_model.py`, API behavior in `test_api.py`, drift logic in `test_performance_drift.py`, per-slice model consistency in `test_model_slices.py`, and frozen endpoint schemas in `test_api_contract.py`. The quality gates include minimum R2 (global and per-slice), maximum sMAPE, maximum R2 gap between scenarios, and API latency thresholds configured in `docker-compose.yml`. New test files must also be added to `tests/Dockerfile` (COPY), wired into `tests/run_tests.py` as a gate, and listed in the CI flake8 step.
 
+As of 2026-07-13 the suite has three known open failures (HTTP 503 instead of 404 on `GET /models/{name}` for nonexistent models, performance-drift false positives on stable data, and a `harv_ladder` slice bias in `WithRobot-AvgProduction`) plus one harness issue: `tests/entrypoint.sh` rewrites service URLs to the Docker gateway IP, which no longer works with localhost-bound published ports — see "Known findings" and "Troubleshooting" in `mlops-stack/CLAUDE.md` for details and the container-IP workaround.
+
 ## Commit & Pull Request Guidelines
 
 Git history follows Conventional Commit style, for example `fix: ...`, `docs: ...`, `feat(security): ...`, and `refactor(tests): ...`. Keep commit subjects imperative and scoped when helpful. Pull requests should describe the change, list validation commands run, mention config or model-impacting changes, and include API screenshots or sample `curl` output when prediction behavior changes.

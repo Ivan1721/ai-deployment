@@ -216,6 +216,15 @@ Orchestrated by `run_tests.py` (6 levels run in sequence — every level is a ha
 
 Levels 3, 4 and 6 skip gracefully when `inference-api` is not reachable. A summary run is logged to the `quality-assurance` MLflow experiment.
 
+#### Known findings (status 2026-07-13, latest full-suite run)
+
+Latest end-to-end run: data 28/28 ✓ · model 82/82 ✓ · api 36/37 ✗ · performance_drift 16/19 ✗ · model_slices 60/61 ✗ · api_contract 26/26 ✓. The failures are the documented open findings:
+
+1. **API**: `GET /models/{name}` returns HTTP 503 instead of 404 for nonexistent models (`test_get_nonexistent_model_404`).
+2. **Performance drift**: the detector raises false positives on stable data (`rmse`/`mae`) in 3 unit tests.
+3. **Slice bias**: `WithRobot-AvgProduction` fails the per-slice gate on `harv_ladder` (R² = 0.00 < 0.50, n = 36). Originally `harv_ground` (R² = 0.21) failed too; a newer champion promoted by the champion/challenger retraining loop corrected that slice — only `harv_ladder` persists.
+4. **Test harness (infra)**: `tests/entrypoint.sh` rewrites the compose-provided service-name URLs to the Docker gateway IP, which stopped working when published ports were bound to `127.0.0.1` (P0 hardening). Affects local `docker compose run test-runner` **and the CI QA step**. Workaround in Troubleshooting below; proper fix: keep the service DNS names and fall back to the gateway only when they don't resolve.
+
 ### Security
 
 **TLS**: nginx generates a self-signed certificate at image build time (`nginx/Dockerfile`). All HTTP traffic is redirected to HTTPS. Use `-k` in curl to skip cert validation.
@@ -260,3 +269,38 @@ All workflows use `runs-on: self-hosted` — the runner shares the Docker socket
 ### When to use `docker compose down -v`
 
 Required when `train.py` changes (new metrics, new model structure) because old models in the `mlflow-data` volume lack the new metadata and tests will fail against them. Also required when switching from SQLite to PostgreSQL backend for the first time (MLflow can't migrate automatically). Without `-v`, just rebuilding images is sufficient.
+
+**Warning**: `down -v` also wipes `keycloak-data` — the `mlops` realm disappears and oauth2-proxy/nginx will crash-loop on the next start until the realm is recreated (see Troubleshooting).
+
+## Troubleshooting
+
+### `docker compose build` fails with `error getting credentials` (WSL2 + Docker Desktop)
+
+BuildKit refreshes base-image metadata against Docker Hub and the Docker Desktop credential helper (`docker-credential-desktop.exe`) can fail over WSL interop (`UtilAcceptVsock ... accept4 failed`). If the images already exist locally (`docker images | grep mlops-stack`), skip the build:
+
+```bash
+docker compose up -d --no-build nginx keycloak oauth2-proxy prometheus grafana
+```
+
+Do **not** run a plain `docker compose up -d` — it would also start the one-shot `model-trainer` (retraining all 8 slots) and `test-runner`. Restarting Docker Desktop usually clears the credential-helper error when a real build is needed.
+
+### oauth2-proxy crash-loops (`404 {"error":"Realm does not exist"}`), nginx crash-loops (`host not found in upstream "oauth2-proxy:4180"`)
+
+The Keycloak realm `mlops` is missing (typically after `docker compose down -v` wiped `keycloak-data`). oauth2-proxy dies at OIDC discovery, and nginx dies because its upstream never comes up. Recreate the realm exactly as `start.sh` does:
+
+```bash
+NEW_SECRET=$(bash setup-keycloak.sh http://localhost:8080 admin admin123 2>&1 | grep "Client secret:" | awk '{print $NF}')
+sed -i "s/OAUTH2_CLIENT_SECRET=.*/OAUTH2_CLIENT_SECRET=$NEW_SECRET/" .env
+docker compose up -d oauth2-proxy nginx
+```
+
+### test-runner aborts with `MLFlow not reachable` (Connection refused on the gateway IP)
+
+Known finding 4 above: `tests/entrypoint.sh` rewrites `http://mlflow:5001` / `http://inference-api:8000` to the Docker gateway IP, but published ports are bound to `127.0.0.1` since the P0 hardening, so the gateway path is dead. Until the entrypoint is fixed, run the suite against the container IPs (IPs don't match the rewrite regex):
+
+```bash
+MLIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mlflow-server)
+APIIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' inference-api)
+docker compose run --rm -e MLFLOW_TRACKING_URI=http://$MLIP:5001 \
+  -e INFERENCE_API_URL=http://$APIIP:8000 test-runner
+```
