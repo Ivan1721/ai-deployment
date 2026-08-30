@@ -1,0 +1,577 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds}
+
+\definecolor{mlopsblue}{RGB}{31,78,121}
+\definecolor{mlopsgreen}{RGB}{0,97,0}
+\definecolor{mlopsorange}{RGB}{180,95,6}
+\definecolor{mlopsgray}{RGB}{80,80,80}
+\definecolor{mlopslight}{RGB}{220,230,242}
+\definecolor{mlopspurple}{RGB}{106,61,154}
+\definecolor{mlopspurplelight}{RGB}{232,224,242}
+\definecolor{mlopsteal}{RGB}{0,105,92}
+\definecolor{mlopstealight}{RGB}{204,232,229}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+%=============================================================
+%  TÍTULO Y AUTORES
+%=============================================================
+\title{Sistema Predictivo con MLOps para la Estimación de Carga de\\
+Trabajo y Producción en Cosechas Humano--Robot}
+
+\author{
+\IEEEauthorblockN{Ivan García Fernández}
+\IEEEauthorblockA{\textit{Facultad de ingeniería}\\
+\textit{ Universidad Andres Bello}\\
+ Santiago, Chile.\\
+i.garciafernandez@uandresbello.edu}
+}
+
+\maketitle
+
+%=============================================================
+%  ABSTRACT
+%=============================================================
+\begin{abstract}
+La creciente incorporación de robots colaborativos en entornos agrícolas genera desafíos inéditos para la planificación operativa de las cosechas. Este trabajo presenta el despliegue, bajo una arquitectura MLOps de nivel productivo, del pipeline predictivo de carga de trabajo humano (\textit{workload}) y producción desarrollado para un escenario de cosecha de paltas humano--robot. El pipeline científico base —simulación multiagente MATLAB con diseño factorial completo (144 corridas por escenario), ANOVA multifactorial tipo II como criterio de selección de variables y torneo de 12 familias de modelos de regresión con doble validación (CV 5-\textit{fold} y \textit{hold-out})— alcanza $R^2$ de validación cruzada $\geq 0{,}98$ en las cuatro variables objetivo y muestra que la estrategia cooperativa aumenta la producción total en 34--64\% con incrementos de workload de solo 5--13\%. La contribución de este informe es la operacionalización de ese pipeline: una arquitectura de cinco capas que integra versionado de experimentos (MLflow sobre PostgreSQL) y de datos (DVC con doble remoto), servicio REST genérico multi-experimento (FastAPI tras nginx con TLS), autenticación (Keycloak/OAuth2 y \textit{API keys}), observabilidad (Prometheus y Grafana), monitoreo de \textit{drift} con reentrenamiento automático \textit{champion/challenger} y CI/CD sobre \textit{runner self-hosted}, todo contenedorizado con Docker. El sistema se valida mediante una pirámide de pruebas de seis niveles cuyas corridas \textit{end-to-end} detectaron cuatro hallazgos reales —incluido un sesgo por sub-grupo que las métricas globales de $R^2$ enmascaran y que el lazo de reentrenamiento automático mitigó parcialmente sin intervención manual—, demostrando el valor de las prácticas de QA por segmento en el cruce entre agricultura de precisión e ingeniería de sistemas ML.
+\end{abstract}
+
+\begin{IEEEkeywords}
+MLOps, machine learning, cosecha agrícola, interacción humano--robot, predicción de workload, ANOVA, FastAPI, MLflow, Docker, simulación multiagente
+\end{IEEEkeywords}
+
+%=============================================================
+%  I. INTRODUCCIÓN
+%=============================================================
+\section{Introducción y Estado del Arte}
+
+\subsection{Contexto: agricultura, robótica e IA}
+
+La agricultura enfrenta presiones estructurales que impulsan la adopción acelerada de tecnologías de automatización. El envejecimiento de la mano de obra rural, la escasez estacional de trabajadores y la necesidad de maximizar la eficiencia operativa han convertido a los robots agrícolas en una solución con creciente viabilidad técnica y económica \cite{willekens2025}. Revisiones sistemáticas recientes documentan una explosión en el uso de inteligencia artificial (IA) y robótica en agricultura a lo largo de la última década \cite{hamrani2025,aijaz2025}, abarcando tareas que van desde la detección de cultivos y la navegación autónoma \cite{wakchaure2023} hasta la colaboración directa con operadores humanos \cite{adamides2023}.
+
+En particular, los sistemas de cosecha semi-autónoma donde personas y robots comparten el espacio de trabajo representan un paradigma emergente con alto potencial productivo \cite{benos2023hri}. La interacción humano--robot (HRI) en contextos agrícolas introduce variables dinámicas que afectan directamente la productividad y la seguridad: el número de trabajadores, el ritmo de cosecha, la distribución espacial de la plantación, el tipo de actividad asignada y el nivel de utilización del robot \cite{guevara2024}. La referencia base de este proyecto, Vásconez y Auat Cheein \cite{vasconez2022}, evaluó producción y carga de trabajo en simulaciones multiagente de cosecha de paltas con estrategias colaborativas: sobre 41 corridas por escenario, la estrategia cooperativa aumentó la producción total en 23--85\% y la entrega en zona de carga en 15--80\%, con incrementos de workload de solo 1--16\%. Sin embargo, ese análisis quedó restringido a un conjunto finito de configuraciones simuladas y no propone modelos predictivos que permitan anticipar el comportamiento del sistema bajo configuraciones no simuladas antes de ejecutarlas en terreno.
+
+Revisiones adicionales sobre tendencias en ML y robótica agrícola, sistemas de precisión y colaboración humano--robot confirman el creciente interés por integrar IA en todas las etapas del proceso productivo \cite{halder2026,taha2025,li2024,thakur2025,mohyuddin2024,icoici2024,logeshwaran2024,tgrs2023}.
+
+\subsection{Colaboración humano--robot, carga de trabajo y simulación}
+
+La literatura de HRC agrícola ha avanzado en tres frentes complementarios. Primero, la \textbf{interacción}: las revisiones sistemáticas identifican la colaboración física persona--robot en tareas de cosecha como el escenario de mayor potencial y, a la vez, de mayor complejidad \cite{benos2023hri,adamides2023}, con líneas activas en reconocimiento de movimiento y actividad humana para coordinar al robot \cite{moysiadis2024,benos2025xai} y en verificación de seguridad ante el contacto físico \cite{guevara2024}. Segundo, la dimensión \textbf{ergonómica}: la carga de trabajo física, estimable mediante tasas metabólicas normalizadas (ISO 8996 \cite{iso8996}), constituye un criterio de diseño tan relevante como la productividad al evaluar estrategias colaborativas \cite{vasconez2022}. Tercero, la evaluación por \textbf{simulación}: ante el costo y la variabilidad de la experimentación en huertos reales, los entornos multiagente calibrados con parámetros de campo permiten generar datos controlados y comparar estrategias operativas de forma reproducible \cite{vasconez2022,garcia2026}. Este proyecto se apoya en los tres frentes: adopta el simulador multiagente validado del estudio base, usa el workload metabólico como variable objetivo de primera clase, y añade sobre ellos una capa predictiva y de despliegue.
+
+\subsection{ML en agricultura y el problema de datos acotados}
+
+El aprendizaje automático ha demostrado ser una herramienta poderosa para la predicción de variables agrícolas a partir de datos operacionales \cite{sharma2023,kuan2025}. Estudios recientes muestran que métodos de \textit{ensemble} como Random Forest y XGBoost ofrecen alto desempeño en tareas de regresión sobre datos tabulares en dominio agrícola \cite{arunkumar2025,sharma2023}. No obstante, un desafío frecuente en este tipo de proyectos es el tamaño acotado del conjunto de datos, ya que los experimentos provienen de simulaciones controladas con variaciones factoriales finitas. Trabajos en dominios relacionados han demostrado que estrategias como la validación k-fold y la regularización permiten obtener modelos robustos en escenarios de datos reducidos \cite{ejss2025}, lo que sustenta la viabilidad del enfoque adoptado.
+
+\subsection{La brecha MLOps en agricultura de precisión}
+
+A pesar del avance en modelos predictivos, existe una brecha significativa entre el desarrollo experimental de modelos ML y su despliegue como herramientas operativas accesibles y reproducibles. Esta brecha ha dado origen al campo de MLOps (\textit{Machine Learning Operations}), que integra prácticas de ingeniería de software —integración continua, versionado de artefactos, contenedorización— con el ciclo de vida completo de los modelos ML \cite{autodrift2025}. Trabajos recientes demuestran que pipelines MLOps basados en MLflow y Docker permiten construir sistemas de predicción reproducibles, escalables y desplegables en entornos de producción \cite{arunkumar2025,singh2025}. En agricultura de precisión, sin embargo, la adopción de MLOps es aún incipiente: Ozimek et al.\ \cite{ozimek2026} presentan uno de los pocos casos documentados de arquitectura ML desplegada con prácticas CI/CD en agricultura, lo que indica que este cruce representa tanto una necesidad urgente como una oportunidad de contribución concreta.
+
+\subsection{Propuesta}
+
+El presente proyecto se articula en dos frentes complementarios. El frente científico —desarrollado en el estudio \textit{companion} de este trabajo \cite{garcia2026}— cierra la brecha predictiva del trabajo base: extiende el simulador de \cite{vasconez2022} a un diseño factorial completo de 144 corridas por escenario, aplica ANOVA multifactorial tipo II como criterio fundamentado de selección de variables \cite{langsrud2003} y entrena 12 familias de modelos de regresión, alcanzando $R^2$ de validación cruzada $\geq 0{,}98$ en las cuatro variables objetivo y habilitando análisis de saturación, interpolación/extrapolación de dotaciones y escenarios multi-robot hipotéticos. El frente de ingeniería —objeto de este informe— aborda la brecha remanente: convertir ese pipeline validado en un servicio operativo, seguro, observable y reproducible. Para ello se implementa una arquitectura MLOps \textit{end-to-end} que automatiza el entrenamiento, registro, despliegue, monitoreo y reentrenamiento de los 8 modelos óptimos (2 escenarios $\times$ 4 \textit{targets}), accesible vía API REST, apoyando decisiones de planificación más informadas, eficientes y reproducibles.
+
+Las contribuciones concretas de este trabajo son: (1)~una arquitectura MLOps de cinco capas, dirigida por configuración YAML, que automatiza el ciclo de vida completo de los 8 modelos del dominio HRI; (2)~una API de inferencia genérica multi-experimento capaz de servir cualquier modelo del \textit{registry} sin cambios de código; (3)~una pirámide de QA de seis niveles con \textit{gates} por sub-grupo (\textit{slices}) que detecta sesgos invisibles para las métricas globales; (4)~un esquema de versionado de datos con doble remoto DVC (local para CI/CD, en la nube para desarrollo); y (5)~una validación \textit{end-to-end} del stack desplegado, con hallazgos reales documentados y su evolución bajo reentrenamiento automático.
+
+%=============================================================
+%  II. OBJETIVOS Y PREGUNTAS DE INVESTIGACIÓN
+%=============================================================
+\section{Objetivos y Preguntas de Investigación}
+
+\subsection{Objetivo General}
+
+Desarrollar e implementar un sistema predictivo basado en machine learning, desplegado bajo una arquitectura MLOps, capaz de estimar la carga de trabajo humano y la producción cosechada en escenarios de colaboración humano--robot, accesible como servicio REST en un entorno de testing similar a producción.
+
+\subsection{Objetivos Específicos}
+
+\begin{enumerate}
+    \item Consolidar los datos experimentales de simulación y el análisis estadístico del estudio base (ANOVA multifactorial tipo II \cite{langsrud2003,garcia2026}), incorporando al pipeline reproducible del stack los tres conjuntos de variables derivados (Sets A, B y C) para las cuatro variables objetivo —\textit{Total recolectado}, producción en zona de carga, \textit{Total workload} y producción promedio humana— en ambos escenarios (8 \textit{targets} en total).
+    \item Reproducir en el stack el torneo de modelos de regresión supervisada del estudio base, verificando que los ganadores por \textit{slot} y sus métricas (R\textsuperscript{2}, MAE, RMSE, sMAPE) sean consistentes con los reportados \textit{offline} \cite{garcia2026}, e incorporando el Set C (términos Workers$\times$Actividad) al entrenamiento de producción.
+    \item Implementar una arquitectura MLOps que integre versionado de experimentos (MLflow sobre PostgreSQL) y de datos (DVC), despliegue como API REST genérica (FastAPI), autenticación y TLS (Keycloak/OAuth2, \textit{API key}), observabilidad (Prometheus + Grafana) y contenedorización (Docker), incorporando monitoreo de \textit{drift} con reentrenamiento automático (\textit{champion/challenger}) y pipelines de CI/CD que reemplacen la evaluación manual por un proceso automatizado y reproducible.
+    \item Validar el sistema en un entorno de testing basado en \texttt{docker-compose}, mediante una pirámide de pruebas de seis niveles (datos, modelo, API, \textit{performance drift}, \textit{model slices} y contrato de API) que verifique disponibilidad del servicio, reproducibilidad de predicciones, ausencia de sesgo por sub-grupo y correctitud de los resultados.
+\end{enumerate}
+
+\subsection{Preguntas de Investigación}
+
+\begin{itemize}
+    \item \textbf{PI-1:} ¿Se reproducen, en el stack desplegado, las jerarquías de variables identificadas por el ANOVA tipo II del estudio base (dominancia de \textit{Workers}, interacción Workers$\times$Actividad), al contrastar el artefacto \texttt{feature\_ranking.json} de los modelos en producción con la jerarquía estadística \textit{offline}?
+    \item \textbf{PI-2:} ¿El torneo automatizado del stack selecciona las mismas familias ganadoras que el estudio \textit{offline} (regresión polinomial de grado 3 y \textit{ensembles} de \textit{boosting}), y qué aporta el Set C al desempeño y a la mitigación del sesgo por sub-grupo en producción?
+    \item \textbf{PI-3:} ¿Qué métricas de calidad de servicio (latencia, reproducibilidad entre ejecuciones) alcanza el sistema desplegado en el entorno de testing con contenedores?
+\end{itemize}
+
+%=============================================================
+%  III. METODOLOGÍA
+%=============================================================
+\section{Marco Metodológico}
+
+La metodología se organiza en tres bloques secuenciales, tal como se ilustra en la Figura~\ref{fig:arquitectura}. Los Bloques 1 y 2 corresponden a las Etapas 1--4 del diagrama (simulación, ANOVA, entrenamiento de modelos y \textit{forecasting}): el pipeline científico, ya completado y reportado en el estudio base \cite{garcia2026}. El Bloque 3 (Etapa 5, MLOps) operacionaliza ese pipeline en el camino de producción: automatiza el torneo de entrenamiento, el registro y el despliegue de los modelos, y sustituye la evaluación manual por monitoreo y reentrenamiento continuos, complementando —sin reemplazar— los \textit{notebooks} de \textit{forecasting} y \textit{what-if} de la Etapa 4.
+
+Un aspecto clave para la factibilidad es que tanto el pipeline científico como la infraestructura MLOps \textbf{ya se encuentran operativos y en una etapa madura}: los dos escenarios fueron consolidados en \texttt{simulation\_all.csv} (284 observaciones válidas, versionadas con DVC), el análisis estadístico y el torneo de modelos están completos y en revisión editorial \cite{garcia2026}, y sobre este conjunto ya están entrenados, registrados y desplegados los 8 modelos de regresión descritos en la Sección~\ref{sec:mlops}, junto con su servicio FastAPI genérico multi-experimento, backend PostgreSQL para MLflow, autenticación TLS/Keycloak/\textit{API key}, observabilidad con Prometheus y Grafana, monitoreo de \textit{drift} y pipelines de CI/CD operando sobre un \textit{runner self-hosted}. La validación de este stack ya se ejecutó de punta a punta mediante la pirámide de pruebas de seis niveles, lo que arrojó hallazgos concretos aún pendientes de corrección (Sección~\ref{sec:resultados}). Las cinco semanas disponibles se concentran, por lo tanto, en: (i) incorporar al stack los conjuntos de variables B y C y el registro de \textit{features} del estudio base, (ii) verificar la consistencia entre el torneo automatizado y la tabla comparativa final \textit{offline}, y (iii) corregir los hallazgos de la validación \textit{end-to-end} y re-certificar el stack bajo el dominio HRI. Esto hace el proyecto no solo factible, sino que reduce el riesgo de ejecución a tareas de integración y corrección dirigida sobre un sistema ya en operación.
+
+%% ---- FIGURA 1: Arquitectura general ----
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{hri_pipeline_v4.pdf}
+    \caption{Arquitectura general del sistema en cinco etapas. Las Etapas 1--4 —simulación multiagente factorial, ANOVA multifactorial tipo II, torneo de 12 modelos de regresión y capa de \textit{forecasting}/\textit{what-if}— constituyen el pipeline científico del estudio base \cite{garcia2026}. La Etapa 5 (\textit{MLOps Deployment}, en rojo) es la contribución de este trabajo: automatiza el entrenamiento, registro y servicio en producción de los 8 modelos con seguridad, observabilidad, monitoreo de \textit{drift} y CI/CD (detalle en la Figura~\ref{fig:mlops}), complementando los \textit{notebooks} offline de la Etapa 4.}
+    \label{fig:arquitectura}
+\end{figure*}
+
+\subsection{Bloque 1: Datos de Simulación y Escenarios}
+
+Los datos provienen del entorno de simulación multiagente MATLAB del estudio base \cite{vasconez2022,garcia2026}: un huerto de paltos parametrizado a partir de una granja chilena, con 12 árboles dispuestos en 3 filas y una zona de carga en $[15, 2]$~m. Cada corrida simula $T = 600$~s de faena con paso $\Delta t = 0{,}25$~s (2401 pasos discretos); una \textit{crop unit} equivale a una palta cosechada y cada trabajador transporta hasta 15 unidades por viaje. El diseño experimental factorial completo varía cuatro factores: número de trabajadores (1, 3, 6, 8, 10, 12), fila de cultivo (1--3), modo de actividad (\textit{Ground, Ladder, Picker, Mixed}) y posición inicial (fija/aleatoria), produciendo 144 corridas por escenario (288 en total). Las configuraciones con 8, 10 y 12 trabajadores son una extensión original respecto del simulador de \cite{vasconez2022}, validado en terreno para dotaciones de 1, 3 y 6; el simulador reestructurado reproduce al original con desviaciones $\leq 0{,}5\%$ en workload y $\leq 4\%$ en producción promedio \cite{garcia2026}. El conjunto consolidado desplegado en el stack (\texttt{simulation\_all.csv}) contiene 284 observaciones válidas y 15 columnas (144 del Escenario A y 140 del B, tras descartar corridas incompletas).
+
+\subsubsection{Escenario A — Cosecha Solo Humanos}
+
+Cada trabajador sigue una máquina de estados de seis fases: cosecha en árbol (hasta 15 unidades), descenso de escalera (5~s), traslado a zona de carga a $v = 0{,}75$~m/s, descarga (2~s), retorno al árbol y ascenso de escalera (5~s) (Figura~\ref{fig:escenario1}). El workload físico se acumula en cada paso de tiempo según costos metabólicos por estado, conforme a ISO 8996:2004 \cite{iso8996}: $w_h(t) = w_h(t-\Delta t) + c_{\sigma(h,t)}\,\Delta t$, donde $c_\sigma$ es el coeficiente metabólico (kcal/s) del estado activo del trabajador $h$; el costo de cosecha $c_\text{harv}$ difiere entre \textit{ground}, \textit{ladder} y \textit{picker}, siendo el ascenso de escalera el estado más costoso.
+
+%% ---- FIGURA 2: Escenario 1 ----
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{flowchart_scenario1_human_harvesting.pdf}
+    \caption{Escenario A: simulación de cosecha con agentes humanos únicamente. El trabajador $h$ sigue una máquina de 6 estados que modela el ciclo completo cosecha--traslado--descarga, acumulando carga de trabajo metabólico (ISO 8996:2004 \cite{iso8996}) en cada paso de tiempo.}
+    \label{fig:escenario1}
+\end{figure}
+
+\subsubsection{Escenario B — Cosecha Humano--Robot}
+
+Extiende el Escenario A incorporando un robot autónomo de dirección en las cuatro ruedas (4WS) que asume la tarea de transporte. El robot percibe mediante un LIDAR de 13 haces ($r = 1{,}5$~m, agrupados en 7 sectores angulares) y un detector de objetos (FoV~$= 120^\circ$, $r = 3$~m); navega con tres controladores difusos Mamdani (\texttt{fis\_goal}, \texttt{fis\_obstacle}, \texttt{fis\_tracking}) sobre rutas de \textit{waypoints} generadas con PRM, inserta \textit{waypoints} al detectar cajas nuevas, las recoge cuando la distancia es $<0{,}75$~m y descarga al retornar a $<0{,}5$~m de la zona de carga (Figura~\ref{fig:escenario2}). El mecanismo clave de reducción de workload es estructural: los estados de traslado y descarga (4--5) se eliminan del ciclo humano —el trabajador deposita la caja junto al corredor del robot y retoma la cosecha de inmediato—, transfiriendo al robot los costos metabólicos de caminata con y sin carga \cite{garcia2026}.
+
+%% ---- FIGURA 3: Escenario 2 ----
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{flowchart_scenario2_robot_human_harvesting.pdf}
+    \caption{Escenario B: simulación de cosecha humano--robot. El robot actualiza su estado mediante LIDAR, detección de cajas, navegación difusa y cinemática inversa 4WS, acumulando producción robótica que se suma a la producción humana total.}
+    \label{fig:escenario2}
+\end{figure}
+
+Cada corrida produce ocho variables de salida. Cuatro constituyen los \textit{targets} del modelado predictivo —\textit{Total recolectado}, producción en zona de carga, \textit{Total workload} y producción promedio humana—, modeladas de forma independiente por escenario (8 \textit{slots} en total, Figura~\ref{fig:arquitectura}); fueron seleccionadas por su relevancia directa para la planificación operativa: las dos primeras caracterizan el rendimiento productivo de la faena, mientras que las dos últimas reflejan el esfuerzo y desempeño individual del equipo humano. Las tres variables residuales (\textit{RemBags}, \textit{RemBoxes}, \textit{RemRobot}) se excluyen del modelado por ser componentes aditivas de \textit{Total recolectado} —incluirlas introduciría fuga de información—, y \textit{MetabolicRate} se conserva solo con fines descriptivos \cite{garcia2026}. Las variables predictoras son \texttt{Humans}, \texttt{ROW\_N}, \texttt{RandomPosition} y la actividad codificada \textit{one-hot} (\texttt{Act\_Ladder}, \texttt{Act\_Mixed}, \texttt{Act\_Picker}, con \textit{ground} como categoría base). La preparación incluye eliminación de registros incompletos, tratamiento de atípicos y estandarización media-cero/varianza-uno dentro del pipeline de cada modelo.
+
+\subsection{Bloque 2: Análisis Estadístico y Entrenamiento de Modelos}
+\label{sec:bloque2}
+
+\subsubsection{ANOVA Multifactorial (Tipo II) y Selección de Variables}
+
+Se aplica ANOVA multifactorial \textbf{tipo II} de forma independiente por escenario, con $\alpha = 0{,}05$; las sumas de cuadrados tipo II evalúan cada factor ajustando por los demás efectos principales sin penalizar por interacciones de orden superior, lo que las hace preferibles al tipo III cuando el modelo incluye términos de interacción \cite{langsrud2003}. El modelo completo comprende los cuatro efectos principales (Workers, CropRow, RandPos, Activity) y cinco interacciones de dos vías (Workers$\times$Activity, Workers$\times$CropRow, Activity$\times$CropRow, Workers$\times$RandPos, Activity$\times$RandPos), más un análisis combinado sobre el dataset agrupado para las interacciones Escenario$\times$Workers y Escenario$\times$Activity.
+
+Con el criterio $p < 0{,}05$ se construyen tres conjuntos de entrada para el modelado: \textbf{Set A} (los cuatro factores, $p=6$ \textit{features} con la codificación \textit{one-hot}), \textbf{Set B} (solo los factores significativos por \textit{target}, con \textit{fallback} al Set A si ninguno alcanzara significancia) y \textbf{Set C} (Set B más los tres términos de interacción W$\times$Ladder, W$\times$Mixed y W$\times$Picker, $p=9$). Antes de entrenar se verifica la multicolinealidad mediante factores de inflación de varianza (VIF), y las definiciones de los conjuntos se serializan en un registro JSON (\texttt{feature\_registry.json}) que garantiza reproducibilidad entre entrenamiento y \textit{forecasting}. La versión actualmente operativa del \textit{pipeline} de producción (Sección~\ref{sec:mlops}) entrena con el Set A; la incorporación de los Sets B y C al torneo del stack es parte del plan de trabajo (Semanas~1--2). Los resultados del análisis estadístico se reportan en la Sección~\ref{sec:resultados}.
+
+\subsubsection{Torneo de Modelos de Regresión}
+
+Se entrenan y comparan 12 algoritmos para cada combinación escenario $\times$ variable objetivo $\times$ \textit{feature set} (288 experimentos en el estudio base), abarcando cinco familias:
+
+\begin{itemize}
+    \item Lineales: \texttt{LinearRegression}, Ridge, Lasso, ElasticNet ($\alpha=0{,}1$)
+    \item Polinomial de grados 2 y 3 (expansión polinomial + Ridge, $\alpha=1{,}0$)
+    \item Árbol de decisión (profundidad máx.\ 6)
+    \item \textit{Ensembles}: Random Forest, Gradient Boosting y XGBoost (200 estimadores) \cite{arunkumar2025,sharma2023}; LightGBM/CatBoost opcionales en el stack
+    \item Red neuronal multicapa (MLP 64--32, ReLU, Adam) \cite{ejss2025}
+\end{itemize}
+
+Cada modelo se evalúa con dos estrategias complementarias: validación cruzada 5-\textit{fold} (media $\pm$ desviación de $R^2$ entre \textit{folds}) y un \textit{hold-out} independiente 80/20 con semilla fija, reportando R\textsuperscript{2}, MAE, RMSE y MAPE/sMAPE más el \textit{feature ranking} por modelo.
+
+Este torneo está implementado en \texttt{model-trainer/train.py}, donde se entrena sobre los 8 \textit{slots} independientes; el ganador de cada \textit{slot} se registra en MLflow para su posterior promoción automática (Sección~\ref{sec:mlops}).
+
+\subsubsection{Etapa 4: \textit{Forecasting} y Análisis Multi-Robot}
+
+Los modelos serializados (\texttt{.joblib}) se emplean sin reentrenamiento en tres modos: (i)~interpolación de dotaciones no simuladas (p.\,ej.\ 4, 7 o 9 trabajadores), admisible para las 12 familias; (ii)~extrapolación hasta 24 trabajadores empleando solo las familias polinomial y lineal —los métodos de árboles no extrapolan fuera de sus hojas—, con un umbral de saturación del 10\% de ganancia para identificar cuándo el aporte del robot se vuelve operacionalmente marginal; y (iii)~análisis multi-robot hipotético mediante un modelo de eficiencia de flota, $\hat{y}(n_r) = \hat{y}_{\mathrm{HO}} + (\hat{y}_{\mathrm{WR}} - \hat{y}_{\mathrm{HO}})\, n_r\, \eta(n_r)$, con $\eta = 1{,}00/0{,}80/0{,}65$ para 1/2/3 robots \cite{emmi2014,garcia2026}. El stack MLOps (Bloque 3) operacionaliza la predicción puntual de esta etapa como servicio en línea, dejando los análisis \textit{what-if} exploratorios en los \textit{notebooks}.
+
+\subsection{Bloque 3: Arquitectura MLOps y Despliegue}
+\label{sec:mlops}
+
+Este bloque lleva el torneo del Bloque 2 al camino de producción: automatiza su ejecución, registro y despliegue mediante un \textit{stack} MLOps de cinco capas, ilustrado en la Figura~\ref{fig:mlops} (el detalle de la Etapa 5 de la Figura~\ref{fig:arquitectura}). A diferencia de un pipeline mínimo de registro y despliegue, esta arquitectura incorpora autenticación y observabilidad, monitoreo continuo de \textit{drift} y reentrenamiento automático \cite{autodrift2025}, alineándose con prácticas de MLOps de nivel productivo \cite{arunkumar2025,singh2025,ozimek2026}.
+
+%% ---- FIGURA 4: Pipeline MLOps de 5 capas (TikZ) ----
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance = 0.18cm,
+    font=\tiny,
+    box/.style={
+        rectangle, rounded corners=2pt,
+        minimum width=3.8cm, minimum height=0.66cm,
+        text centered, text width=3.7cm,
+        draw, thick, inner sep=2pt
+    },
+    bluebox/.style={box, fill=mlopslight,         draw=mlopsblue,   text=mlopsblue},
+    greenbox/.style={box, fill=green!10,          draw=mlopsgreen,  text=mlopsgreen},
+    tealbox/.style={box, fill=mlopstealight,      draw=mlopsteal,   text=mlopsteal},
+    orangebox/.style={box, fill=orange!10,        draw=mlopsorange, text=mlopsorange},
+    purplebox/.style={box, fill=mlopspurplelight, draw=mlopspurple, text=mlopspurple},
+    graybox/.style={box,  fill=gray!10,           draw=mlopsgray,   text=mlopsgray},
+    arrow/.style={-Stealth, thick, color=mlopsgray},
+    layer/.style={rectangle, rounded corners=4pt, dashed, thick, inner sep=4pt}
+]
+\node[graybox] (input) {\texttt{simulation\_all.csv}: 284 obs., 6 features, 8 targets (DVC)};
+
+\node[bluebox, below=0.26cm of input]  (train)    {Model Trainer: torneo 12 algoritmos $\times$ 8 \textit{slots} (CV 5-fold)};
+\node[bluebox, below=of train]         (registry) {MLflow Registry (backend PostgreSQL): \textit{gate} $R^2\!\geq\!0{,}70 \to$ Production};
+
+\node[greenbox, below=0.26cm of registry] (api)   {FastAPI: \texttt{/health /info /predict /reload} + \texttt{/models} genérico multi-experimento};
+\node[greenbox, below=of api]             (nginx) {nginx (TLS): \textit{reverse proxy} \texttt{/mlflow}, \texttt{/api}, \texttt{/grafana}};
+
+\node[tealbox, below=0.26cm of nginx] (security) {Keycloak + oauth2-proxy (SSO en \texttt{/mlflow}) + \texttt{X-API-Key} (\texttt{/api})};
+\node[tealbox, below=of security]     (observ)   {Prometheus + Grafana: 8 métricas, \textit{dashboard} de 8 paneles};
+
+\node[orangebox, below=0.26cm of observ] (drift) {Drift Detector (30s): KS datos + KS concepto};
+\node[orangebox, below=of drift]        (perf)  {\textit{Performance drift}: effect size + t-test + EWMA};
+
+\node[purplebox, below=0.26cm of perf] (ci) {CI (\texttt{ci.yml}): \texttt{dvc pull} $\to$ lint $\to$ build $\to$ train $\to$ QA (6 niveles)};
+\node[purplebox, below=of ci]          (cd) {CD/Retrain: \textit{rolling update} + \textit{champion/challenger} (\texttt{retrain.yml})};
+
+\node[graybox, below=0.26cm of cd] (output) {Stack operativo: API + seguridad + monitoreo + CI/CD};
+
+\draw[arrow] (input)    -- (train);
+\draw[arrow] (train)    -- (registry);
+\draw[arrow] (registry) -- (api);
+\draw[arrow] (api)      -- (nginx);
+\draw[arrow] (nginx)    -- (security);
+\draw[arrow] (security) -- (observ);
+\draw[arrow] (observ)   -- (drift);
+\draw[arrow] (drift)    -- (perf);
+\draw[arrow] (perf)     -- (ci);
+\draw[arrow] (ci)       -- (cd);
+\draw[arrow] (cd)       -- (output);
+
+\begin{pgfonlayer}{background}
+\node[layer, draw=mlopsblue, fill=mlopslight, fill opacity=0.18,
+      fit=(train)(registry),
+      label={[font=\tiny\bfseries\color{mlopsblue}]left:\rotatebox{90}{MLflow}}] {};
+\node[layer, draw=mlopsgreen, fill=green!5, fill opacity=0.25,
+      fit=(api)(nginx),
+      label={[font=\tiny\bfseries\color{mlopsgreen}]left:\rotatebox{90}{Servicio}}] {};
+\node[layer, draw=mlopsteal, fill=mlopstealight, fill opacity=0.25,
+      fit=(security)(observ),
+      label={[font=\tiny\bfseries\color{mlopsteal}]left:\rotatebox{90}{Seg./Obs.}}] {};
+\node[layer, draw=mlopsorange, fill=orange!5, fill opacity=0.25,
+      fit=(drift)(perf),
+      label={[font=\tiny\bfseries\color{mlopsorange}]left:\rotatebox{90}{Drift}}] {};
+\node[layer, draw=mlopspurple, fill=mlopspurplelight, fill opacity=0.30,
+      fit=(ci)(cd),
+      label={[font=\tiny\bfseries\color{mlopspurple}]left:\rotatebox{90}{CI/CD}}] {};
+\end{pgfonlayer}
+\end{tikzpicture}
+\caption{Pipeline MLOps de cinco capas (Bloque 3). Los 8 modelos del Bloque 2 se registran y versionan en MLflow sobre backend PostgreSQL (Capa 1), se exponen vía FastAPI genérico/nginx con TLS (Capa 2), quedan protegidos por SSO/\textit{API key} e instrumentados con Prometheus/Grafana (Capa 3), se monitorean continuamente por \textit{drift} con reentrenamiento \textit{champion/challenger} (Capa 4) y se despliegan mediante CI/CD con \textit{runner self-hosted} (Capa 5) \cite{autodrift2025,ozimek2026,singh2025}.}
+\label{fig:mlops}
+\end{figure}
+
+\subsubsection{Capa 1 — Entrenamiento y Registro (MLflow)}
+El módulo \texttt{model-trainer} ejecuta el torneo de 12 algoritmos (Sección~\ref{sec:bloque2}) sobre 8 \textit{slots} independientes (2 escenarios $\times$ 4 \textit{targets}), cada uno validado con CV 5-fold. El modelo con mayor R\textsuperscript{2} de cada \textit{slot} se registra en el experimento MLflow \texttt{hri-harvesting} junto con un artefacto \texttt{feature\_ranking.json}, y se promueve a \texttt{Production} si supera el \textit{quality gate} $R^2 \geq 0{,}70$ \cite{arunkumar2025}. Los 8 modelos siguen la convención \texttt{hri-\{HumanOnly,WithRobot\}-\{TotalRecollected, CargoZoneProd, TotalWorkload, AvgProduction\}}, asegurando trazabilidad y versionado \cite{singh2025}. El backend de metadatos de MLflow migró de SQLite a \textbf{PostgreSQL}, habilitando escrituras concurrentes desde múltiples \textit{runs}; el dataset \texttt{simulation\_all.csv} se versiona con \textbf{DVC} bajo un esquema de \textit{doble remoto}: un remoto local (\texttt{local-store}) usado exclusivamente por el \textit{runner} self-hosted vía \texttt{dvc pull} en cada corrida de CI/CD —sin dependencias externas ni credenciales—, y un remoto secundario en Google Drive (autenticación OAuth) que permite a los desarrolladores sincronizar el dataset desde cualquier máquina sin depender de la ruta local de producción. Ambos remotos coexisten sin que el pipeline de CI/CD requiera modificación alguna.
+
+\subsubsection{Capa 2 — Servicio de Inferencia (FastAPI + nginx)}
+\texttt{inference-api} carga los 8 modelos \texttt{Production} en memoria al iniciar y expone cuatro \textit{endpoints} específicos de HRI: \texttt{GET~/health} (estado y número de modelos cargados), \texttt{GET~/info} (metadatos de escenarios, \textit{targets} y \textit{features}), \texttt{POST~/predict} (recibe escenario, número de trabajadores, fila de cultivo, posición y actividad, y retorna las cuatro predicciones en una sola llamada) y \texttt{POST~/reload} (recarga modelos sin reiniciar el contenedor). A estos se suma un conjunto \textbf{genérico multi-experimento}: \texttt{GET~/models} lista cualquier modelo en \texttt{Production} del \textit{registry}, \texttt{GET~/models/\{name\}} devuelve su metadata y \texttt{POST~/models/\{name\}/predict} predice con cualquier modelo \textit{sklearn} registrado, permitiendo servir nuevos experimentos (por ejemplo, un segundo dataset con distinto \texttt{MODEL\_CONFIG}) sin cambios de código. Un \textit{reverse proxy} \texttt{nginx} con TLS (certificado autofirmado, redirección \texttt{80}$\to$\texttt{443}) unifica el acceso bajo \texttt{/mlflow/}, \texttt{/api/} y \texttt{/grafana/} \cite{ozimek2026}.
+
+\subsubsection{Capa 3 — Seguridad y Observabilidad}
+Dos mecanismos de autenticación conviven según el consumidor: \texttt{/mlflow/} queda protegido por \textbf{SSO} vía \textbf{Keycloak} (realm \texttt{mlops}) y \textbf{oauth2-proxy}, que intercepta la petición en \texttt{nginx} mediante \texttt{auth\_request} y redirige al login si la sesión no es válida; \texttt{/predict} y \texttt{/reload} en \texttt{inference-api}, en cambio, exigen un \textit{header} \texttt{X-API-Key}, adecuado para consumo programático (\textit{drift-detector}, CI/CD). \texttt{/health} e \texttt{/info} permanecen públicos. En observabilidad, \texttt{inference-api} expone en \texttt{GET~/metrics} cuatro métricas Prometheus (\texttt{inference\_requests\_total}, \texttt{inference\_request\_duration\_seconds}, \texttt{inference\_models\_loaded}, \texttt{inference\_predictions\_total}) y \texttt{drift-detector} expone otras cuatro en el puerto \texttt{9091} (\texttt{drift\_ks\_pval}, \texttt{drift\_detected\_total}, \texttt{drift\_consecutive\_windows}, \texttt{drift\_retrain\_triggered\_total}). \textbf{Prometheus} las recolecta cada 15~s y \textbf{Grafana} las visualiza en un \textit{dashboard} de 8 paneles (modelos cargados, tasa de \textit{requests}, latencia p50/p95/p99, \textit{p-values} KS por \textit{feature} y detecciones de \textit{drift}), accesible vía \texttt{/grafana/}.
+
+\subsubsection{Capa 4 — Monitoreo y Reentrenamiento}
+El servicio \texttt{drift-detector} ejecuta cada 30~s, sobre una ventana de 30 muestras, tres pruebas inspiradas en \cite{autodrift2025}: (i)~\textit{data drift}, test de Kolmogorov--Smirnov por \textit{feature} de entrada ($p<0{,}05$); (ii)~\textit{concept drift}, KS sobre la distribución de predicciones en vivo versus referencia; y (iii)~\textit{performance drift}, una cascada de tres pruebas (\textit{effect size}~$>0{,}05$, \textit{t-test} con $p<0{,}05$ y $|\Delta|>0{,}02$, y EWMA con $\alpha=0{,}3$) sobre R\textsuperscript{2}, RMSE, MAE, sMAPE y \textit{max error}. Tras dos ventanas consecutivas con \textit{drift}, se dispara un ciclo \textit{champion/challenger}: se entrena un \textit{challenger} (Gradient Boosting) para los 8 \textit{slots}, se compara su R\textsuperscript{2} contra el \textit{champion} vigente, se promueve si mejora y se invoca \texttt{POST~/reload}. Todo se registra en los experimentos MLflow \texttt{drift-monitoring}, \texttt{performance-drift-monitoring} y \texttt{retraining-events}.
+
+\subsubsection{Capa 5 — CI/CD y Pirámide de Testing}
+Un \textit{runner self-hosted} (instalado vía \texttt{setup\_runner.sh} como servicio \texttt{systemd}, con acceso directo al \textit{socket} Docker) ejecuta tres flujos de GitHub Actions: \texttt{ci.yml} (en cada \textit{push}/PR: \texttt{dvc pull}, \textit{lint}, validación de \texttt{docker-compose}, \textit{build}, entrenamiento y suite de QA completa), \texttt{cd.yml} (en \textit{push} a \texttt{main}: \texttt{dvc pull}, \textit{rolling update} de \texttt{inference-api} y luego \texttt{drift-detector}+\texttt{nginx}, con QA post-despliegue como \textit{gate}) y \texttt{retrain.yml} (programado semanalmente, con \textit{gates} configurables y \texttt{POST~/reload} si aprueba) \cite{ozimek2026}. La suite de QA implementa una pirámide de \textbf{seis niveles} orquestada por \texttt{run\_tests.py}, donde cada nivel bloquea al siguiente si falla: (1)~\textit{datos} — esquema, nulos, rangos y balance de escenarios; (2)~\textit{modelo} — $R^2\geq0{,}70$, sMAPE$<20\%$, estabilidad CV y comparación contra \textit{baseline}; (3)~\textit{API} — disponibilidad, esquema de respuesta y latencia $<500$~ms; (4)~\textit{performance drift} — pruebas unitarias del detector (\textit{effect size}, \textit{t-test}, EWMA); (5)~\textit{model slices} — detección de sesgo por sub-grupo (actividad, rango de trabajadores, escenario), exigiendo $R^2\geq0{,}50$ por \textit{slice} y una brecha de $R^2$ entre escenarios $\leq0{,}25$; y (6)~\textit{API contract} — validación de esquema de respuesta para detectar cambios que rompan compatibilidad (\textit{breaking changes}). Los resultados se registran en el experimento MLflow \texttt{quality-assurance}.
+
+Los resultados de las corridas de validación de esta pirámide contra el stack desplegado, y los hallazgos que produjeron, se reportan en la Sección~\ref{sec:resultados}.
+
+\subsection{Plan de Trabajo}
+
+La Tabla~\ref{tab:plan} detalla la distribución de actividades en las cinco semanas disponibles.
+
+\begin{table}[H]
+\caption{Plan de Trabajo por Semana}
+\label{tab:plan}
+\centering\small
+\begin{tabular}{@{}ccp{4.5cm}@{}}
+\toprule
+\textbf{Sem.} & \textbf{Bloque} & \textbf{Actividades principales} \\
+\midrule
+1 & B1--B2 & Validación de \texttt{simulation\_all.csv} (pirámide Niveles 1--2) e incorporación del registro de \textit{features} del estudio base (\texttt{feature\_registry.json}, Sets A/B/C) al \texttt{model-trainer} \\
+2 & B2 & Extensión del torneo del stack a los Sets B y C (términos W$\times$Actividad); verificación de consistencia de ganadores por \textit{slot} contra la tabla comparativa \textit{offline} \cite{garcia2026}; registro en MLflow \\
+3 & B3 & Corrección de los hallazgos (i) código 503 vs.\ 404 en \texttt{/models/\{name\}}, (ii) falsos positivos del detector de \textit{performance drift} y (iv) conectividad del \texttt{test-runner} (URLs por nombre de servicio); nueva corrida de la pirámide \\
+4 & B3 & Mitigación del hallazgo (iii), sesgo por \textit{slice} en \texttt{WithRobot-AvgProduction} (reentrenamiento con Set C y/o ajuste de \textit{gates} por segmento) y re-certificación \textit{end-to-end} del stack \\
+5 & B3 & Pruebas de integración finales (pirámide de 6 niveles); documentación y entrega \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\caption{Stack Tecnológico}
+\label{tab:stack}
+\centering\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Componente} & \textbf{Herramienta} \\
+\midrule
+Lenguaje & Python 3.10+ \\
+Datos de entrada & \texttt{simulation\_all.csv} (284 obs., 8 \textit{targets}) \\
+ML & scikit-learn, XGBoost, LightGBM, CatBoost \\
+Seguimiento \& registro & MLflow 2.x (Tracking + Registry, backend PostgreSQL) \\
+Versionado de datos & DVC (remoto local + Google Drive) \\
+API REST & FastAPI + Uvicorn (genérica multi-experimento) \\
+\textit{Reverse proxy} & nginx (TLS) \\
+Autenticación & Keycloak + oauth2-proxy (SSO), \textit{API key} \\
+Observabilidad & Prometheus + Grafana \\
+Contenedorización & Docker + docker-compose \\
+CI/CD & GitHub Actions (\textit{runner} self-hosted) \\
+Monitoreo de \textit{drift} & scipy (KS test), statsmodels (EWMA) \\
+Testing & pytest (6 niveles) \\
+Análisis estadístico & pandas, scipy, statsmodels \\
+Control de versiones & Git / GitHub \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=============================================================
+%  IV. RESULTADOS
+%=============================================================
+\section{Resultados}
+\label{sec:resultados}
+
+\subsection{Pipeline Científico (Etapas 1--4)}
+
+El ANOVA tipo II identificó los cuatro factores de entrada como estadísticamente significativos ($p<0{,}001$) para los cuatro \textit{targets} en ambos escenarios, con $R^2$ del modelo $\geq 0{,}95$. \textit{Workers} dominó la jerarquía con el mayor estadístico F en todas las respuestas; \textit{RandomPosition} fue el predictor más débil (no significativo para workload y producción promedio en el escenario humano--robot, donde la estrategia dinámica de \textit{waypoints} absorbe parte de la variabilidad posicional); y la interacción Workers$\times$Activity resultó significativa ($p<0{,}001$) para los \textit{targets} de productividad. Dos consecuencias directas para el modelado: el Set B resultó idéntico al Set A (todos los factores son necesarios) y la interacción detectada justifica los términos del Set C. El chequeo VIF ($\leq 2{,}0$) confirmó la ortogonalidad del diseño factorial \cite{garcia2026}.
+
+En el torneo de 288 experimentos, la Tabla~\ref{tab:bestmodels} resume los ganadores por \textit{slot}: la regresión polinomial de grado 3 domina los \textit{targets} de productividad en el escenario solo-humanos —consistente con rendimientos decrecientes suaves al crecer la dotación—, mientras que los \textit{ensembles} de \textit{boosting} dominan el escenario humano--robot, cuyo \textit{target} más difícil (zona de carga, $R^2$ CV $= 0{,}981$) refleja la variabilidad estocástica de la inserción dinámica de \textit{waypoints}. Ninguna familia cae bajo $R^2$ CV $= 0{,}92$ salvo el MLP (hasta $0{,}84$ en producción promedio), penalizado por el tamaño muestral ($n \leq 144$); la concordancia entre CV y \textit{hold-out} descarta sobreajuste. El \textit{feature ranking} por Random Forest corrobora la jerarquía ANOVA (\textit{Workers} con importancia $\approx 0{,}85$--$0{,}88$ en producción total y workload) e identifica el término W$\times$Ladder como predictor dominante de la producción promedio en humano--robot —un hallazgo recuperable solo mediante el Set C \cite{garcia2026}.
+
+\begin{table}[H]
+\caption{Mejor modelo por \textit{slot} en el estudio base (CV 5-\textit{fold}) \cite{garcia2026}}
+\label{tab:bestmodels}
+\centering\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Escenario} & \textbf{Target} & \textbf{Modelo (set)} & \textbf{$R^2$ CV} \\
+\midrule
+Solo humanos & Total recolectado & Polinomial g.3 (B) & 0{,}999 \\
+Solo humanos & Zona de carga & Polinomial g.3 (B) & 0{,}998 \\
+Solo humanos & Workload & Grad.\ Boosting (C) & 0{,}9997 \\
+Solo humanos & Prod.\ promedio & XGBoost (C) & 0{,}992 \\
+Humano--robot & Total recolectado & Grad.\ Boosting (A) & 0{,}9998 \\
+Humano--robot & Zona de carga & XGBoost (C) & 0{,}981 \\
+Humano--robot & Workload & Grad.\ Boosting (A) & 1{,}000$^\dagger$ \\
+Humano--robot & Prod.\ promedio & Árbol decisión (A) & 1{,}000$^\dagger$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+{\footnotesize $^\dagger$Ajuste perfecto atribuible al determinismo del simulador (memorización): constituye una cota superior, sin evidencia de generalización a datos de terreno \cite{garcia2026}.}
+\end{table}
+
+A nivel de sistema, la estrategia cooperativa con un robot aumenta la producción total recolectada en 34--64\% (máximo en \textit{ground}, $+64\%$) y la entrega en zona de carga en 16--41\%, con un incremento de workload humano de solo 5--13\%, extendiendo los rangos reportados por \cite{vasconez2022} a un espacio de diseño más amplio y sistemático. En la Etapa 4, no se detecta saturación del aporte del robot dentro del rango entrenado (umbral del 10\%), pero la producción en zona de carga exhibe un máximo en $\approx$18--20 trabajadores —el transporte robótico se vuelve la restricción activa—, lo que sugiere un ratio robot:trabajadores de $\approx$1:18--20 como conjetura estructurada de diseño; a dotación 12, el despliegue de 2 y 3 robots proyecta ganancias medias de $+74\%$ y $+90\%$ respectivamente \cite{garcia2026}.
+
+\subsection{Despliegue y Operación del Stack}
+
+El stack completo opera sobre Docker Compose con 11 servicios (9 de larga vida y 2 \textit{one-shot}: \texttt{model-trainer} y \texttt{test-runner}), con los 8 modelos en \texttt{Production} cargados en memoria por la API de inferencia. Las verificaciones operativas confirmaron el comportamiento esperado de punta a punta: una predicción de los cuatro \textit{targets} en una sola llamada autenticada (\texttt{X-API-Key}) vía nginx con TLS retornó valores coherentes con la simulación (producción promedio $\approx 82$ unidades para 6 trabajadores en solo-humanos, frente a $\approx 80$ del estudio base) dentro del \textit{gate} de latencia de 500~ms; el SSO Keycloak/oauth2-proxy protege \texttt{/mlflow/} (redirección 302 verificada); Grafana sirve el \textit{dashboard} de 8 paneles; y Prometheus mantiene sus dos \textit{targets} de \textit{scrape} en estado \texttt{up}. El esquema de doble remoto DVC se verificó de punta a punta: eliminado el dataset local (archivo y caché), \texttt{dvc pull} desde el remoto de Google Drive lo restauró íntegro con hash MD5 idéntico. Durante una semana de operación continua, el lazo de la Capa 4 ejecutó múltiples ciclos de reentrenamiento automático, acumulando cientos de versiones por \textit{slot} en el \textit{registry} (416--690 en los \textit{slots} inspeccionados) sin intervención manual.
+
+\subsection{Validación \textit{End-to-End}: Pirámide de Seis Niveles}
+
+La Tabla~\ref{tab:qa} resume la corrida completa más reciente de la pirámide contra el stack desplegado.
+
+\begin{table}[H]
+\caption{Resultados de la pirámide de seis niveles (corrida completa contra el stack desplegado)}
+\label{tab:qa}
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Nivel} & \textbf{Resultado} & \textbf{Detalle} \\
+\midrule
+1 — Datos & \checkmark~PASS & 28/28 \\
+2 — Modelo & \checkmark~PASS & 82/82 \\
+3 — API & $\times$~FAIL & 36/37 — hallazgo (i) \\
+4 — \textit{Perf.\ drift} & $\times$~FAIL & 16/19 — hallazgo (ii) \\
+5 — \textit{Model slices} & $\times$~FAIL & 60/61 — hallazgo (iii) \\
+6 — Contrato API & \checkmark~PASS & 26/26 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La primera corrida \textit{end-to-end} arrojó tres hallazgos concretos, pendientes de corrección antes de la re-certificación: (i)~\texttt{GET~/models/\{name\}} devuelve código HTTP 503 en vez de 404 para modelos inexistentes; (ii)~el detector de \textit{performance drift} produce falsos positivos (RMSE/MAE) en sus propias pruebas unitarias sobre datos estables; y (iii)~el modelo \texttt{WithRobot-AvgProduction} exhibía sesgo real por sub-grupo en las actividades \textit{harv\_ground} ($R^2=0{,}21$) y \textit{harv\_ladder} ($R^2=0{,}00$), ambas por debajo del \textit{gate} de Nivel 5. El tercer hallazgo es particularmente ilustrativo: para ese mismo \textit{target}, el estudio base reporta un $R^2$ global de validación cercano a $1{,}0$ —cota superior atribuible al determinismo del simulador \cite{garcia2026}—, de modo que solo la evaluación por sub-grupos revela la degradación por segmento que la métrica global enmascara.
+
+La segunda corrida (Tabla~\ref{tab:qa}), ejecutada tras una semana de ciclos de reentrenamiento automático, mostró que el sesgo se redujo sin intervención manual: el \textit{slice} \textit{harv\_ground} superó el \textit{gate} con un \textit{champion} más reciente promovido por el lazo \textit{champion/challenger}, persistiendo únicamente \textit{harv\_ladder} ($R^2=0{,}00$, $n=36$). La misma corrida reveló un cuarto hallazgo, de infraestructura: el \textit{entrypoint} del \texttt{test-runner} reescribe las URLs internas de servicio hacia la IP del \textit{gateway} de Docker, un patrón que quedó inoperante al restringirse los puertos publicados a \texttt{127.0.0.1} durante el endurecimiento de seguridad, afectando también al paso de QA en CI (se validó un \textit{workaround} con IPs internas de contenedor).
+
+%=============================================================
+%  V. DISCUSIÓN
+%=============================================================
+\section{Discusión}
+
+\textbf{Métricas globales vs.\ evaluación por sub-grupos.} El contraste entre el $R^2$ global $\approx 1{,}0$ y el $R^2=0{,}00$ del \textit{slice} \textit{harv\_ladder} para el mismo modelo demuestra que los \textit{gates} agregados son insuficientes como criterio de promoción a producción. El Nivel 5 de la pirámide convierte el sesgo por segmento en un \textit{gate} bloqueante y, en este proyecto, detectó un defecto real que ninguna métrica global habría reportado — el argumento central a favor de integrar la evaluación por \textit{slices} en el ciclo de CI/CD y no solo en el análisis exploratorio.
+
+\textbf{Alcance y límites del reentrenamiento automático.} El lazo \textit{champion/challenger} corrigió el \textit{slice} \textit{harv\_ground} sin intervención humana, evidencia de que la Capa 4 aporta mantenimiento real del desempeño. Sin embargo, \textit{harv\_ladder} persistió a través de múltiples ciclos, lo que sugiere una limitación estructural y no un problema de actualización. La explicación más plausible conecta directamente con el análisis estadístico: el estudio base identificó el término de interacción W$\times$Ladder como el predictor dominante de la producción promedio en el escenario humano--robot \cite{garcia2026}, y ese término no existe en el Set A con el que hoy entrena el \textit{pipeline} de producción. La hipótesis de mitigación más directa del hallazgo (iii) es, por lo tanto, incorporar el Set C al torneo del stack (Semanas 1--2), cerrando el círculo entre el análisis \textit{offline} y el comportamiento del modelo desplegado.
+
+\textbf{MLOps en agricultura de precisión.} La arquitectura demuestra que prácticas de nivel productivo —SSO, TLS, observabilidad, CI/CD sobre \textit{runner self-hosted}, versionado dual de datos— son viables en un dominio agrícola con recursos modestos (un solo host), en línea con los escasos casos documentados \cite{ozimek2026,arunkumar2025,autodrift2025,singh2025}. El hallazgo (iv) ilustra, además, el costo de integración que el endurecimiento de seguridad impone sobre la propia infraestructura de pruebas: exactamente el tipo de fricción operativa que separa un prototipo académico de un sistema operable, y que rara vez se reporta en la literatura.
+
+\textbf{Limitaciones.} Primero, la generalización está acotada por el simulador: los $R^2 = 1{,}000$ observados reflejan memorización de un sistema determinista y los modelos no deben usarse en operaciones reales sin validación de campo \cite{garcia2026}. Segundo, el entorno de despliegue es de \textit{testing} (certificado autofirmado, host único, secretos locales), no un ambiente productivo con gestión centralizada de secretos y alta disponibilidad. Tercero, los factores de eficiencia multi-robot $\eta(n_r)$ para $n_r>1$ son supuestos teóricos \cite{emmi2014}, no calibrados por simulación. Cuarto, el tamaño muestral ($n\leq144$ por escenario; $n=36$ por \textit{slice} de actividad) limita la potencia estadística de los \textit{gates} por sub-grupo.
+
+%=============================================================
+%  VI. CONCLUSIONES Y TRABAJO FUTURO
+%=============================================================
+\section{Conclusiones y Trabajo Futuro}
+
+Se diseñó, desplegó y validó de punta a punta un sistema MLOps de cinco capas que operacionaliza el pipeline predictivo HRI del estudio base: 8 modelos de regresión servidos tras nginx/TLS con doble mecanismo de autenticación, observabilidad con Prometheus/Grafana, monitoreo de \textit{drift} con reentrenamiento automático \textit{champion/challenger}, versionado de datos con doble remoto DVC y CI/CD reproducible custodiado por una pirámide de QA de seis niveles.
+
+Respecto de las preguntas de investigación: \textbf{PI-1} — la jerarquía del ANOVA tipo II (dominancia de \textit{Workers}, interacción W$\times$Activity) se corrobora en los \textit{rankings} de importancia del estudio base; su verificación sistemática contra el artefacto \texttt{feature\_ranking.json} de los modelos en producción queda programada junto con la integración de los Sets B/C. \textbf{PI-2} — \textit{offline} dominan la regresión polinomial de grado 3 y los \textit{ensembles} de \textit{boosting}; en el stack, los ciclos \textit{champion/challenger} (con \textit{challenger} Gradient Boosting) han promovido repetidamente nuevas versiones, y la comparación formal por \textit{slot} con los tres \textit{feature sets} es parte del plan (Semanas 2--3). \textbf{PI-3} — el servicio cumple el \textit{gate} de latencia ($<500$~ms) bajo TLS y autenticación, mantiene estable su contrato de API (26/26) y la reproducibilidad de las predicciones queda garantizada por el versionado de modelos del \textit{registry}.
+
+El trabajo futuro inmediato es la agenda que la propia pirámide produjo: corregir los hallazgos (i), (ii) y (iv), re-certificar el stack, e incorporar el Set C al entrenamiento de producción como mitigación del hallazgo (iii). En el mediano plazo: validación de campo de los modelos —la frontera que el determinismo del simulador impone—, simulación multi-robot explícita que sustituya los $\eta$ hipotéticos, y extensión multi-experimento del stack con un segundo dataset real aprovechando la API genérica y el diseño dirigido por configuración \cite{garcia2026}.
+
+%=============================================================
+%  BIBLIOGRAFÍA
+%=============================================================
+\begin{thebibliography}{00}
+
+\bibitem{vasconez2022}
+J.~P. Vásconez y F.~A. Auat Cheein, ``Workload and production assessment in the avocado harvesting process using human-robot collaborative strategies,''
+\textit{Biosystems Engineering}, vol.~223, pp.~56--77, 2022.
+DOI: 10.1016/j.biosystemseng.2022.08.010.
+
+\bibitem{garcia2026}
+I.~García Fernández y J.~P. Vásconez, ``Predicting workload and production in a human-robot collaborative avocado harvesting scenario: a machine learning approach,''
+manuscrito en revisión, \textit{Biosystems Engineering}, 2026.
+
+\bibitem{langsrud2003}
+{\O}.~Langsrud, ``ANOVA for unbalanced data: use Type II instead of Type III sums of squares,''
+\textit{Statistics and Computing}, vol.~13, pp.~163--167, 2003.
+DOI: 10.1023/A:1023260610025.
+
+\bibitem{iso8996}
+ISO 8996:2004, ``Ergonomics of the thermal environment --- Determination of metabolic rate,''
+International Organization for Standardization, Ginebra, 2004.
+
+\bibitem{emmi2014}
+L.~Emmi, M.~González-de-Soto, G.~Pajares y P.~González-de-Santos, ``New trends in robotics for agriculture: integration and assessment of a real fleet of robots,''
+\textit{The Scientific World Journal}, vol.~2014, art.~404059, 2014.
+DOI: 10.1155/2014/404059.
+
+\bibitem{willekens2025}
+A.~Willekens \textit{et al.}, ``Development of an agricultural robot taskmap operation framework,''
+\textit{Journal of Field Robotics}, 2025.
+DOI: 10.1002/rob.70003.
+
+\bibitem{guevara2024}
+L.~Guevara \textit{et al.}, ``Probabilistic model-checking of collaborative robots: a human injury assessment in agricultural applications,''
+\textit{Computers and Electronics in Agriculture}, vol.~218, p.~108987, 2024.
+DOI: 10.1016/j.compag.2024.108987.
+
+\bibitem{adamides2023}
+G.~Adamides y Y.~Edan, ``Human-robot collaboration systems in agricultural tasks: a review and roadmap,''
+\textit{Computers and Electronics in Agriculture}, vol.~204, p.~107541, 2023.
+DOI: 10.1016/j.compag.2022.107541.
+
+\bibitem{benos2023hri}
+L.~Benos \textit{et al.}, ``Human-robot interaction in agriculture: a systematic review,''
+\textit{Sensors}, vol.~23, no.~15, p.~6776, 2023.
+DOI: 10.3390/s23156776.
+
+\bibitem{wakchaure2023}
+M.~Wakchaure, B.~K. Patle y A.~K. Mahindrakar, ``Application of AI techniques and robotics in agriculture: a review,''
+\textit{Artificial Intelligence in the Life Sciences}, vol.~3, p.~100057, 2023.
+DOI: 10.1016/j.ailsci.2023.100057.
+
+\bibitem{hamrani2025}
+A.~Hamrani \textit{et al.}, ``AI and robotics in agriculture: a systematic and quantitative review of research trends (2015--2025),''
+\textit{Crops}, vol.~5, no.~5, p.~75, 2025.
+DOI: 10.3390/crops5050075.
+
+\bibitem{aijaz2025}
+N.~Aijaz \textit{et al.}, ``Artificial intelligence in agriculture: advancing crop productivity and sustainability,''
+\textit{Journal of Agriculture and Food Research}, p.~101762, 2025.
+DOI: 10.1016/j.jafr.2025.101762.
+
+\bibitem{kuan2025}
+Y.~N. Kuan, K.~M. Goh y L.~L. Lim, ``Systematic review on machine learning and computer vision in precision agriculture: applications, trends, and emerging techniques,''
+\textit{Engineering Applications of Artificial Intelligence}, p.~110401, 2025.
+DOI: 10.1016/j.engappai.2025.110401.
+
+\bibitem{sharma2023}
+P.~Sharma \textit{et al.}, ``Predicting agriculture yields based on machine learning using regression and deep learning,''
+\textit{IEEE Access}, vol.~11, pp.~101416--101430, 2023.
+DOI: 10.1109/access.2023.3321861.
+
+\bibitem{arunkumar2025}
+K.~E. Arunkumar \textit{et al.}, ``Predicting dry matter intake in cattle at scale using gradient boosting regression techniques and MLflow containerization,''
+\textit{Journal of Animal Science}, 2025.
+DOI: 10.1093/jas/skaf041.
+
+\bibitem{autodrift2025}
+IEEE Computer Soc., ``AutoDrift: a forecast-aware concept drift detection and retraining pipeline in MLOps with CMAPSS,''
+\textit{Proc. 11th IEEE Int. Conf. Big Data Computing Service and Machine Learning Applications (BigDataService)}, Tucson, AZ, 2025.
+DOI: 10.1109/bigdataservice65758.2025.00019.
+
+\bibitem{singh2025}
+R.~Singh y B.~Roy, ``Scalable earthquake magnitude prediction using spatio-temporal data and model versioning,''
+\textit{Scientific Reports}, 2025.
+DOI: 10.1038/s41598-025-00804-x.
+
+\bibitem{ozimek2026}
+J.~Ozimek \textit{et al.}, ``AI-driven machine learning architecture for scalable irrigation detection in precision agriculture: a case study with CropX,''
+\textit{Proc. ECSA 2025 (Software Architecture)}, 2026.
+DOI: 10.1007/978-3-032-02138-0\_27.
+
+\bibitem{ejss2025}
+V.~Barkov \textit{et al.}, ``Modern neural networks for small tabular datasets: the new default for field-scale digital soil mapping?,''
+\textit{European Journal of Soil Science}, 2025.
+DOI: 10.1111/ejss.70299.
+
+\bibitem{halder2026}
+K.~Halder \textit{et al.}, ``High-resolution maize yield mapping across Africa using earth observation and machine learning,''
+\textit{Science of Remote Sensing}, p.~100344, 2026.
+DOI: 10.1016/j.srs.2025.100344.
+
+\bibitem{taha2025}
+M.~F. Taha \textit{et al.}, ``Emerging technologies for precision crop management towards Agriculture 5.0: a comprehensive overview,''
+\textit{Agriculture}, vol.~15, no.~6, p.~582, 2025.
+DOI: 10.3390/agriculture15060582.
+
+\bibitem{li2024}
+M.~Li \textit{et al.}, ``CNN-MLP-based configurable robotic arm for smart agriculture,''
+\textit{Agriculture}, vol.~14, no.~9, p.~1624, 2024.
+DOI: 10.3390/agriculture14091624.
+
+\bibitem{thakur2025}
+A.~Thakur \textit{et al.}, ``Physical artificial intelligence for powering the next revolution in robotics,''
+\textit{Journal of Computing and Information Science in Engineering}, 2025.
+DOI: 10.1115/1.4070122.
+
+\bibitem{mohyuddin2024}
+G.~Mohyuddin \textit{et al.}, ``Evaluation of machine learning approaches for precision farming in smart agriculture system: a comprehensive review,''
+\textit{IEEE Access}, vol.~12, pp.~56432--56452, 2024.
+DOI: 10.1109/access.2024.3390581.
+
+\bibitem{moysiadis2024}
+V.~Moysiadis \textit{et al.}, ``Human-robot interaction through dynamic movement recognition for agricultural environments,''
+\textit{AgriEngineering}, vol.~6, no.~3, 2024.
+DOI: 10.3390/agriengineering6030146.
+
+\bibitem{benos2025xai}
+L.~Benos \textit{et al.}, ``Explainable AI-enhanced human activity recognition for human-robot collaboration in agriculture,''
+\textit{Applied Sciences}, vol.~15, no.~2, p.~650, 2025.
+DOI: 10.3390/app15020650.
+
+\bibitem{icoici2024}
+IEEE, ``A review on the use of AI and robotics in agricultural practices,''
+\textit{Proc. 2nd Int. Conf. Intelligent Cyber Physical Systems and IoT (ICOICI 2024)}, 2024.
+DOI: 10.1109/icoici62503.2024.10696164.
+
+\bibitem{logeshwaran2024}
+J.~Logeshwaran \textit{et al.}, ``Improving crop production using an agro-deep learning framework in precision agriculture,''
+\textit{BMC Bioinformatics}, vol.~25, p.~319, 2024.
+DOI: 10.1186/s12859-024-05970-9.
+
+\bibitem{tgrs2023}
+P.~Zhang \textit{et al.}, ``Pixel--scene--pixel--object sample transferring: a labor-free approach for high-resolution plastic greenhouse mapping,''
+\textit{IEEE Transactions on Geoscience and Remote Sensing}, vol.~61, 2023.
+DOI: 10.1109/tgrs.2023.3257293.
+
+\end{thebibliography}
+
+\end{document}

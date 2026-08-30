@@ -11,7 +11,8 @@
 *.synctex.gz
 paper/*.log
 
-# Paper drafts and heavy binary assets (PDFs, .ai sources, IEEE template zip) —
-# kept locally, not tracked in git to avoid repo bloat
-/paper/
-IEEE_Conference_Template__JFC_.zip
+# paper/ SI se versiona desde 2026-08-30.
+# Antes estaba ignorado ("to avoid repo bloat"), pero eso dejaba el .tex,
+# el .ai de Illustrator y los diagramas viviendo solo en un disco local.
+# Son ~15 MB: el costo de repo es despreciable frente al riesgo de perderlos.
+# Los intermedios de compilacion siguen ignorados por las reglas de arriba.

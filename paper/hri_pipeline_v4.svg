@@ -1,0 +1,1794 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Capa_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1720 1050">
+  <!-- Generator: Adobe Illustrator 30.3.0, SVG Export Plug-In . SVG Version: 2.1.3 Build 182)  -->
+  <defs>
+    <style>
+      .st0, .st1, .st2, .st3, .st4, .st5, .st6, .st7, .st8, .st9, .st10, .st11, .st12, .st13 {
+        stroke-width: .5px;
+      }
+
+      .st0, .st1, .st3, .st4, .st11, .st12 {
+        fill: #f8fafc;
+      }
+
+      .st0, .st7 {
+        stroke: #b91c1c;
+      }
+
+      .st14 {
+        fill: #5a6070;
+        font-family: SegoeUI, 'Segoe UI';
+        font-size: 12px;
+      }
+
+      .st14, .st15, .st16, .st17, .st18, .st19, .st20, .st21, .st22, .st23, .st24, .st25, .st26, .st27, .st28, .st29, .st30, .st31, .st32, .st33, .st34, .st35, .st36, .st37, .st38, .st39, .st40, .st41, .st42, .st43, .st44 {
+        isolation: isolate;
+      }
+
+      .st1 {
+        stroke: #2d2d2d;
+      }
+
+      .st15, .st16, .st17, .st18, .st19, .st20, .st21, .st23, .st24, .st25, .st26, .st27, .st28, .st30, .st31, .st32, .st33, .st34, .st35, .st36, .st37, .st38, .st39, .st40, .st41, .st42, .st43, .st44 {
+        font-family: TimesNewRomanPSMT, 'Times New Roman';
+      }
+
+      .st15, .st16, .st17, .st18, .st19, .st30, .st33, .st37, .st38, .st39, .st40, .st42, .st43, .st44 {
+        font-size: 19px;
+      }
+
+      .st15, .st20, .st22, .st27, .st34, .st41, .st44 {
+        fill: #fff;
+      }
+
+      .st2, .st3 {
+        stroke: #7c3aed;
+      }
+
+      .st2, .st21 {
+        fill: #8b5cf6;
+      }
+
+      .st16, .st17, .st33 {
+        letter-spacing: -.07em;
+      }
+
+      .st16, .st24 {
+        fill: #7c3aed;
+      }
+
+      .st17, .st30, .st35, .st38 {
+        fill: #2563eb;
+      }
+
+      .st18, .st19, .st30, .st39, .st44 {
+        letter-spacing: -.08em;
+      }
+
+      .st18, .st9 {
+        fill: #f59e0b;
+      }
+
+      .st45, .st50, .st51, .st52, .st54 {
+        stroke: #dc2626;
+      }
+
+      .st45, .st46, .st47, .st48, .st49, .st50, .st51, .st52, .st53, .st54, .st55, .st56 {
+        stroke-width: 2px;
+      }
+
+      .st45, .st50, .st57, .st51, .st52, .st58, .st54, .st8 {
+        fill: #2d2d2d;
+      }
+
+      .st46, .st47, .st48, .st59, .st60, .st49, .st53, .st55, .st56, .st61, .st62 {
+        fill: none;
+      }
+
+      .st46, .st4, .st9 {
+        stroke: #d97706;
+      }
+
+      .st19, .st36, .st43 {
+        fill: #0891b2;
+      }
+
+      .st20 {
+        letter-spacing: -.05em;
+      }
+
+      .st20, .st21, .st22, .st23, .st24, .st25, .st26, .st27, .st28, .st32, .st34, .st35, .st36 {
+        font-size: 17px;
+      }
+
+      .st21, .st24, .st25 {
+        letter-spacing: -.07em;
+      }
+
+      .st47 {
+        stroke: #b91c1c;
+      }
+
+      .st22 {
+        font-family: SegoeUISymbol, 'Segoe UI Symbol';
+      }
+
+      .st22, .st23, .st28, .st34, .st35, .st36 {
+        letter-spacing: -.08em;
+      }
+
+      .st48 {
+        stroke: #5c3d8f;
+      }
+
+      .st59, .st55, .st61, .st62 {
+        stroke: #64748b;
+      }
+
+      .st23, .st13 {
+        fill: #3b82f6;
+      }
+
+      .st49, .st11, .st13 {
+        stroke: #2563eb;
+      }
+
+      .st25, .st28, .st39, .st40 {
+        fill: #d97706;
+      }
+
+      .st26, .st33 {
+        fill: #b91c1c;
+      }
+
+      .st7 {
+        fill: #dc2626;
+      }
+
+      .st63, .st57, .st6 {
+        stroke: #059669;
+      }
+
+      .st63, .st6 {
+        fill: #10b981;
+      }
+
+      .st5, .st53, .st12 {
+        stroke: #0891b2;
+      }
+
+      .st57, .st58, .st62 {
+        stroke-miterlimit: 10;
+      }
+
+      .st5 {
+        fill: #06b6d4;
+      }
+
+      .st31 {
+        font-size: 14px;
+      }
+
+      .st31, .st42 {
+        fill: #5c3d8f;
+      }
+
+      .st56 {
+        stroke: #f59e0b;
+      }
+
+      .st58, .st64, .st10 {
+        stroke: #ea6c00;
+      }
+
+      .st32, .st37 {
+        fill: #b91c1c;
+      }
+
+      .st65 {
+        fill: #64748b;
+      }
+
+      .st56 {
+        stroke-dasharray: 6 3;
+      }
+
+      .st8 {
+        stroke: #f8fafc;
+      }
+
+      .st64, .st10 {
+        fill: #f97316;
+      }
+
+      .st61 {
+        stroke-width: 1.5px;
+      }
+
+      .st41 {
+        font-size: 16px;
+        letter-spacing: -.08em;
+      }
+    </style>
+  </defs>
+  <g>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(501.54 1026.41)"><tspan x="0" y="0">Legend:</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <rect class="st1" x="557.54" y="1015.41" width="12" height="12" rx="2" ry="2"/>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(575.54 1026.41)"><tspan x="0" y="0">Config / output</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <rect class="st13" x="667.54" y="1015.41" width="12" height="12" rx="2" ry="2"/>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(685.54 1026.41)"><tspan x="0" y="0">Simulation</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <rect class="st6" x="751.37" y="1015.41" width="12" height="12" rx="2" ry="2"/>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(769.37 1026.41)"><tspan x="0" y="0">Scenario A</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <rect class="st10" x="838.45" y="1015.41" width="12" height="12" rx="2" ry="2"/>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(856.44 1026.41)"><tspan x="0" y="0">Scenario B</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <rect class="st2" x="920.57" y="1015.41" width="12" height="12" rx="2" ry="2"/>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(938.56 1026.41)"><tspan x="0" y="0">Statistics</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <rect class="st9" x="991.47" y="1015.41" width="12" height="12" rx="2" ry="2"/>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(1009.46 1026.41)"><tspan x="0" y="0">Machine Learning</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <rect class="st5" x="1115.94" y="1015.41" width="12" height="12" rx="2" ry="2"/>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(1133.93 1026.41)"><tspan x="0" y="0">Forecasting</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g>
+    <line class="st59" x1="808.54" y1="694.57" x2="808.54" y2="738.21"/>
+    <polygon class="st65" points="803.55 736.75 808.54 745.38 813.53 736.75 803.55 736.75"/>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st33" transform="translate(63 768)"><tspan x="0" y="0">MLOPS DEPLOYMENT — PRODUCTION SERVING (STAGE 5)</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st26" transform="translate(63 786)"><tspan x="0" y="0">Live model serving, security, observability, drift monitoring &amp; CI/CD — complements the offline Stage 4 notebooks</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st47" x="48" y="746.5" width="1550" height="203.5" rx="16" ry="16"/>
+  <rect class="st51" x="63" y="800" width="290" height="130" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st15" transform="translate(77 824)"><tspan x="0" y="0">MLflow Registry</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(77 846)"><tspan x="0" y="0">MLflow 2.x + backend PostgreSQL</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(77 868)"><tspan x="0" y="0">gate R² ≥ 0.70 → Production</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(77 890)"><tspan x="0" y="0">dataset versionado con DVC</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st54" x="368" y="800" width="290" height="130" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st15" transform="translate(382 824)"><tspan x="0" y="0">Inference API</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(382 846)"><tspan x="0" y="0">FastAPI genérico multi-experimento</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(382 868)"><tspan x="0" y="0">GET /models · POST /predict</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(382 890)"><tspan x="0" y="0">nginx + TLS (80→443)</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st50" x="673" y="800" width="290" height="130" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st15" transform="translate(687 824)"><tspan x="0" y="0">Seguridad &amp; Observabilidad</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(687 846)"><tspan x="0" y="0">Keycloak + oauth2-proxy (SSO)</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(687 868)"><tspan x="0" y="0">X-API-Key · Prometheus + Grafana</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(687 890)"><tspan x="0" y="0">8 métricas · dashboard 8 paneles</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st52" x="978" y="800" width="290" height="130" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st15" transform="translate(992 824)"><tspan x="0" y="0">Drift Detector</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(992 846)"><tspan x="0" y="0">KS datos + KS concepto</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(992 868)"><tspan x="0" y="0">Performance drift: effect size</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(992 890)"><tspan x="0" y="0">+ t-test + EWMA</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st45" x="1283" y="800" width="290" height="130" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st15" transform="translate(1297 824)"><tspan x="0" y="0">CI/CD &amp; QA</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(1297 846)"><tspan x="0" y="0">Runner self-hosted · dvc pull</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(1297 868)"><tspan x="0" y="0">Pirámide de 6 niveles</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st27" transform="translate(1297 890)"><tspan x="0" y="0">champion/challenger retrain</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g>
+    <line class="st55" x1="817.5" y1="950" x2="817.5" y2="963"/>
+    <polygon class="st65" points="812.5 961.5 817.5 970 822.5 961.5 812.5 961.5"/>
+  </g>
+  <rect class="st0" x="48" y="970" width="1550" height="34" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st37" transform="translate(63 985)"><tspan x="0" y="0">Stack operativo:</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <text class="st32" transform="translate(190 985)"><tspan x="0" y="0">8 modelos servidos en producción · monitoreo continuo · reentrenamiento automático (champion/challenger)</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g>
+    <rect class="st7" x="1213" y="1015.41" width="12" height="12" rx="2" ry="2"/>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <g class="st29">
+                  <g class="st29">
+                    <text class="st14" transform="translate(1231 1026.41)"><tspan x="0" y="0">MLOps Deployment</tspan></text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <path class="st60" d="M272.24,406.36" marker-end="url(#arrow)"/>
+  <path class="st60" d="M287.42,408.49" marker-end="url(#arrow)"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st42" transform="translate(11.69 409.46)"><tspan x="0" y="0">STATISTICAL ANALYSIS - MULTIFACTORIAL ANOVA</tspan></text>
+              </g>
+              <g class="st29">
+                <text class="st31" transform="translate(491.42 409.46)"><tspan x="0" y="0">(TYPE II)</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st21" transform="translate(10.59 702.23)"><tspan x="0" y="0">Factors: Workers · ROW_N · RandomPosition · Activity + cross interactions</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <path class="st60" d="M277.89,442.09" marker-end="url(#arrow)"/>
+  <rect class="st8" x="10.59" y="442.09" width="168.86" height="72" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st44" transform="translate(57.32 463.07)"><tspan x="0" y="0">Main effects</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(42.39 480.91)"><tspan x="0" y="0">F-statistic per factor</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(64.8 496.91)"><tspan x="0" y="0">p-value · R²</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st8" x="193" y="442.09" width="169.77" height="72" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st44" transform="translate(241.7 463.07)"><tspan x="0" y="0">Interactions</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(224.51 480.91)"><tspan x="0" y="0">Workers × Activity</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(194.87 498.09)"><tspan x="0" y="0">Workers × Row · Activity × Row</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st8" x="376.31" y="442.09" width="168.86" height="72" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st44" transform="translate(397.87 463.07)"><tspan x="0" y="0">Scenario comparison</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(408.8 481.21)"><tspan x="0" y="0">Scenario × Workers</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(411.13 497.21)"><tspan x="0" y="0">Scenario × Activity</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <path class="st60" d="M277.89,540.09" marker-end="url(#arrow)"/>
+  <rect class="st3" x="117.71" y="540.09" width="320.96" height="44" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st16" transform="translate(130.02 558.09)"><tspan x="0" y="0">Variable selection - ANOVA criterion (p &lt; 0.05)</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st24" transform="translate(167.46 574.09)"><tspan x="0" y="0">Three input feature sets for ML models</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <path class="st60" d="M277.89,613.69" marker-end="url(#arrow)"/>
+  <rect class="st8" x="60.02" y="613.69" width="140" height="68" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st44" transform="translate(73.69 632.69)"><tspan x="0" y="0">Set A — full</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(92.45 649.69)"><tspan x="0" y="0">Workers · Row</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(84.99 665.69)"><tspan x="0" y="0">Position · Activity</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st8" x="207.89" y="613.69" width="140" height="68" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st44" transform="translate(211.75 632.69)"><tspan x="0" y="0">Set B — significant</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(232.22 649.69)"><tspan x="0" y="0">Only factors with</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(227.67 665.69)"><tspan x="0" y="0">p &lt; 0.05 per target</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st8" x="355.75" y="613.69" width="140" height="68" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st44" transform="translate(358.37 632.69)"><tspan x="0" y="0">Set C — interactions</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(385.55 649.69)"><tspan x="0" y="0">Sig. + terms</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <g class="st29">
+            <g class="st29">
+              <g class="st29">
+                <text class="st34" transform="translate(377.24 665.69)"><tspan x="0" y="0">Workers × Activity</tspan></text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <line class="st59" x1="95.02" y1="514.09" x2="95.02" y2="527.09"/>
+  <line class="st59" x1="460.74" y1="527.09" x2="460.74" y2="514.09"/>
+  <line class="st59" x1="95.02" y1="527.09" x2="460.75" y2="527.09"/>
+  <g>
+    <line class="st59" x1="277.89" y1="514.09" x2="277.89" y2="532.92"/>
+    <polygon class="st65" points="272.9 531.46 277.89 540.09 282.87 531.46 272.9 531.46"/>
+  </g>
+  <g>
+    <line class="st59" x1="130.05" y1="598.79" x2="130.05" y2="606.52"/>
+    <polygon class="st65" points="125.07 605.06 130.05 613.69 135.04 605.06 125.07 605.06"/>
+  </g>
+  <g>
+    <line class="st59" x1="427.08" y1="598.79" x2="427.08" y2="606.52"/>
+    <polygon class="st65" points="422.09 605.06 427.08 613.69 432.06 605.06 422.09 605.06"/>
+  </g>
+  <line class="st59" x1="425.75" y1="602.81" x2="425.75" y2="602.81"/>
+  <line class="st59" x1="130.06" y1="598.79" x2="427.08" y2="598.79"/>
+  <g>
+    <line class="st59" x1="277.89" y1="584.09" x2="277.89" y2="606.52"/>
+    <polygon class="st65" points="272.9 605.06 277.89 613.69 282.87 605.06 272.9 605.06"/>
+  </g>
+  <rect class="st48" y="391.36" width="553.85" height="318.71" rx="20" ry="20"/>
+  <rect class="st11" x="176.83" y="15.21" width="200.88" height="44" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st30" transform="translate(181.94 33.92)"><tspan x="0" y="0">Factorial Experimental Design</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st35" transform="translate(179.24 49.92)"><tspan x="0" y="0">Workers · Row · Activity · Position</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st38" transform="translate(41.72 25.41)"><tspan x="0" y="0">SIMULATION</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st63" x="41.72" y="94.04" width="225" height="29.12" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(79.89 113.59)"><tspan x="0" y="0">Scenario A - Humans only</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st63" x="41.72" y="131.77" width="225" height="173.79" rx="8" ry="8"/>
+  <rect class="st57" x="46.46" y="143.82" width="105" height="58" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(71.19 159.97)"><tspan x="0" y="0">Humans</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(78.51 174.35)"><tspan x="0" y="0">1, 3, 6,</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(74.74 188.61)"><tspan x="0" y="0">8, 10, 12</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st57" x="157.01" y="143.82" width="104.88" height="58" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(180.84 159.97)"><tspan x="0" y="0">Crop row</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(180.84 174.35)"><tspan x="0" y="0">Row 1, 2, 3</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st57" x="46.46" y="212.33" width="105" height="58" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(73.24 228.59)"><tspan x="0" y="0">Activity</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(51.41 243.8)"><tspan x="0" y="0">Ground · Ladder</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(56.88 257.83)"><tspan x="0" y="0">Picker · Mixed</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st57" x="156.89" y="212.33" width="104.88" height="58" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(165.56 228.59)"><tspan x="0" y="0">Initial position</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(167.15 243.8)"><tspan x="0" y="0">Fixed / random</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(74.89 280.76)"><tspan x="0" y="0">States:</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(74.89 295.02)"><tspan x="0" y="0">harvest → unload → return</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st64" x="289.46" y="94.04" width="225" height="29.12" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(312.15 113.59)"><tspan x="0" y="0">Scenario B - Human–Robot</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st64" x="289.46" y="131.77" width="225" height="173.79" rx="8" ry="8"/>
+  <rect class="st58" x="294.3" y="143.82" width="105" height="58" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(315.89 159.97)"><tspan x="0" y="0">H+Robot</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(328.18 174.35)"><tspan x="0" y="0">1, 3, 6,</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(322.49 188.61)"><tspan x="0" y="0">8, 10, 12</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st58" x="405.7" y="143.82" width="105" height="58" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(420.68 159.97)"><tspan x="0" y="0">Robot route</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(427.5 174.35)"><tspan x="0" y="0">Waypoints</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(426.45 188.61)"><tspan x="0" y="0">+ deviation</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st58" x="294.3" y="212.33" width="105" height="58" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(310.35 228.59)"><tspan x="0" y="0">Box_detect</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(323.47 243.8)"><tspan x="0" y="0">LIDAR</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(309.88 257.83)"><tspan x="0" y="0">fuzzy control</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st58" x="405.7" y="212.33" width="105" height="58" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(414.59 228.59)"><tspan x="0" y="0">Loading zone</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(424.88 243.8)"><tspan x="0" y="0">Unload and</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(441.03 257.83)"><tspan x="0" y="0">restart</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(289.36 280.62)"><tspan x="0" y="0">States:</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(289.36 295.02)"><tspan x="0" y="0">detect → detour → collect → resume</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st17" transform="translate(36.7 324.39)"><tspan x="0" y="0">Output variables (both scenarios)</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st23" transform="translate(37.34 343.06)"><tspan x="0" y="0">Workload · Avg. production · Cargo zone · Remaining in bags · Remaining in boxes ·</tspan></text>
+        </g>
+      </g>
+    </g>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st23" transform="translate(37.34 357.46)"><tspan x="0" y="0">Remaining in robot · Total collected</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st49" x="28.66" y="3.34" width="497.2" height="366.77" rx="20" ry="20"/>
+  <g>
+    <line class="st59" x1="154.22" y1="73.9" x2="154.22" y2="86.87"/>
+    <polygon class="st65" points="149.23 85.41 154.22 94.04 159.2 85.41 149.23 85.41"/>
+  </g>
+  <g>
+    <line class="st59" x1="401.96" y1="73.92" x2="401.96" y2="86.87"/>
+    <polygon class="st65" points="396.97 85.41 401.96 94.04 406.95 85.41 396.97 85.41"/>
+  </g>
+  <line class="st59" x1="154.22" y1="73.91" x2="401.96" y2="73.92"/>
+  <line class="st59" x1="277.4" y1="59.21" x2="277.4" y2="73.91"/>
+  <g>
+    <line class="st59" x1="1385.54" y1="265.3" x2="1385.54" y2="282.5"/>
+    <polygon class="st65" points="1380.56 281.05 1385.54 289.68 1390.53 281.05 1380.56 281.05"/>
+  </g>
+  <rect class="st12" x="1219.32" y="289.68" width="332.47" height="80.22" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st19" transform="translate(1251.78 312.68)"><tspan x="0" y="0">Forecasting &amp; What-if Analysis — Stage 4</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st36" transform="translate(1276.78 333.39)"><tspan x="0" y="0">Serialized .joblib models used directly</tspan></text>
+        </g>
+      </g>
+    </g>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st36" transform="translate(1328.7 347.79)"><tspan x="0" y="0">without retraining</tspan></text>
+        </g>
+      </g>
+    </g>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st36" transform="translate(1247.74 362.19)"><tspan x="0" y="0">Inputs: Workers, Activity, Row, Position, n_robots</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <line class="st59" x1="1385.54" y1="369.9" x2="1385.54" y2="403.17"/>
+  <line class="st59" x1="1169.41" y1="389.89" x2="1601.68" y2="389.9"/>
+  <g>
+    <line class="st59" x1="1169.41" y1="389.9" x2="1169.41" y2="395.72"/>
+    <polygon class="st65" points="1164.42 394.27 1169.41 402.9 1174.39 394.27 1164.42 394.27"/>
+  </g>
+  <g>
+    <line class="st59" x1="1601.68" y1="389.9" x2="1601.68" y2="395.72"/>
+    <polygon class="st65" points="1596.7 394.27 1601.68 402.9 1606.67 394.27 1596.7 394.27"/>
+  </g>
+  <rect class="st8" x="1064.4" y="403.17" width="210.01" height="72" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(1129.52 422.7)"><tspan x="0" y="0">Interpolation</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1074.83 438.91)"><tspan x="0" y="0" xml:space="preserve"> Workers</tspan></text>
+        </g>
+        <g class="st29">
+          <text class="st22" transform="translate(1126.73 438.91)"><tspan x="0" y="0">∈</tspan></text>
+        </g>
+      </g>
+    </g>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1134.65 438.91)"><tspan x="0" y="0">{1…12} not simulated</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1105.69 454.79)"><tspan x="0" y="0">e.g. 4, 7, 9 workers · all</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1115.85 470.79)"><tspan x="0" y="0">compatible models</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st8" x="1280.53" y="403.17" width="210.03" height="72" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(1347.47 422.7)"><tspan x="0" y="0">Extrapolation</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1321.16 438.86)"><tspan x="0" y="0">Workers &gt; 12 (hasta 24)</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1311.88 454.79)"><tspan x="0" y="0">Poly deg.2–3 + Linear only</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1305.5 470.79)"><tspan x="0" y="0">saturation threshold 10% gain</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st8" x="1496.68" y="403.42" width="210.03" height="72" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st44" transform="translate(1540.51 422.7)"><tspan x="0" y="0">Multi-Robot Analysis</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st41" transform="translate(1505.25 438.6)"><tspan x="0" y="0">ŷ(nᵣ) = ŷHO + (ŷWR − ŷHO)·nᵣ·η(nᵣ)</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1513.53 454.79)"><tspan x="0" y="0">η: 1.00 / 0.80 / 0.65 (1,2,3 robots)</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st34" transform="translate(1516.63 470.79)"><tspan x="0" y="0">optimal ratio ~1:18–20 workers</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <line class="st59" x1="1169.41" y1="474.5" x2="1169.41" y2="486.5"/>
+  <g>
+    <line class="st59" x1="1385.54" y1="474.5" x2="1385.54" y2="491.43"/>
+    <polygon class="st65" points="1380.56 489.97 1385.54 498.61 1390.53 489.97 1380.56 489.97"/>
+  </g>
+  <line class="st59" x1="1601.69" y1="475.44" x2="1601.69" y2="486.47"/>
+  <line class="st59" x1="1601.69" y1="486.47" x2="1169.41" y2="486.47"/>
+  <rect class="st12" x="1169.42" y="498.61" width="432.26" height="22" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st19" transform="translate(1175.03 514.61)"><tspan x="0" y="0">Response surfaces Workers × Activity × n_robots · saturation curves</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st12" x="1246.9" y="208.9" width="277.29" height="56" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st19" transform="translate(1284.82 229.9)"><tspan x="0" y="0" xml:space="preserve">Agricultural  HRI predictive tool</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st36" transform="translate(1254.24 244.53)"><tspan x="0" y="0">Estimates productivity and workload under any</tspan></text>
+        </g>
+      </g>
+    </g>
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st36" transform="translate(1290.28 258.93)"><tspan x="0" y="0">harvest operational configuration</tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <g class="st29">
+        <g class="st29">
+          <text class="st43" transform="translate(1064.4 198.54)"><tspan x="0" y="0" xml:space="preserve">PREDICTIVE &amp; FORECASTING LAYER  </tspan></text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <rect class="st53" x="1057.73" y="177.85" width="655.62" height="356.95" rx="20" ry="20"/>
+  <g>
+    <line class="st61" x1="276.93" y1="370.5" x2="276.93" y2="380.59"/>
+    <polygon class="st65" points="269.45 378.41 276.93 391.36 284.41 378.41 269.45 378.41"/>
+  </g>
+  <g>
+    <line class="st61" x1="553.85" y1="550.71" x2="563.95" y2="550.71"/>
+    <polygon class="st65" points="561.76 558.19 574.71 550.71 561.76 543.23 561.76 558.19"/>
+  </g>
+  <path class="st60" d="M953.54,128.08" marker-end="url(#arrow)"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st40" transform="translate(586.04 77.25)"><tspan x="0" y="0">MACHINE LEARNING TRAINING</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st28" transform="translate(580.14 676.77)"><tspan x="0" y="0">Continuous problem · one model per target variable · k-fold validation</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="592.09" y="115.6" width="135" height="52" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(641.72 134.6)"><tspan x="0" y="0">Linear</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st20" transform="translate(624.54 151.6)"><tspan x="0" y="0">Ridge · Lasso</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st20" transform="translate(634.32 165)"><tspan x="0" y="0">ElasticNet</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="738.84" y="115.6" width="135" height="52" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(772.45 134.6)"><tspan x="0" y="0">Polynomial</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st20" transform="translate(774.54 151.6)"><tspan x="0" y="0">degree 2–3</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="885.59" y="115.6" width="135" height="52" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(940.28 134.6)"><tspan x="0" y="0">Tree</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st20" transform="translate(898.14 151.6)"><tspan x="0" y="0">Decision Tree Reg.</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="661.95" y="176.69" width="135" height="52" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(699.82 195.69)"><tspan x="0" y="0">Ensemble</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st20" transform="translate(661.95 212.69)"><tspan x="0" y="0">RF · GBR · XGBoost</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="819.77" y="176.69" width="135" height="52" rx="6" ry="6"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(866.72 195.69)"><tspan x="0" y="0">Neural</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st20" transform="translate(844.75 212.69)"><tspan x="0" y="0">MLP Regressor</tspan></text>
+    </g>
+  </g>
+  <path class="st60" d="M881.84,375.44" marker-end="url(#arrow)"/>
+  <rect class="st4" x="581.96" y="262.54" width="446.97" height="44" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st39" transform="translate(681.65 279.59)"><tspan x="0" y="0">Target variables (4 independent models)</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st25" transform="translate(582.96 296.54)"><tspan x="0" y="0">Total recollected · Cargo zone prod. · Total workload · Avg. human production</tspan></text>
+    </g>
+  </g>
+  <path class="st60" d="M806.28,330.48" marker-end="url(#arrow)"/>
+  <rect class="st4" x="634.8" y="330.48" width="341.62" height="44" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st39" transform="translate(650 348.48)"><tspan x="0" y="0">Evaluation and validation — k-fold cross-validation</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st28" transform="translate(665.05 364.48)"><tspan x="0" y="0">Comparison by model, by feature set and by scenario</tspan></text>
+    </g>
+  </g>
+  <path class="st60" d="M806.28,398.48" marker-end="url(#arrow)"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st18" transform="translate(620.6 414.12)"><tspan x="0" y="0">Model comparison metrics</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="620.56" y="433.56" width="120" height="64" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(668.81 452.56)"><tspan x="0" y="0">R²</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(626.84 471.78)"><tspan x="0" y="0">Explained variance</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(647.67 487.56)"><tspan x="0" y="0">0-1 ↑ better</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="747.39" y="433.56" width="120" height="64" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(788.05 452.56)"><tspan x="0" y="0">MAE</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(764.06 471.56)"><tspan x="0" y="0">Mean abs. error</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(772.98 487.56)"><tspan x="0" y="0">original units</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="682.22" y="506.58" width="120" height="64" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(719.49 527.11)"><tspan x="0" y="0">RMSE</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(696.93 546.11)"><tspan x="0" y="0">Penalizes outliers</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(726.71 562.11)"><tspan x="0" y="0">√MSE</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="810.61" y="506.58" width="120" height="64" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(847.33 527.11)"><tspan x="0" y="0">MAPE</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(827.79 546.11)"><tspan x="0" y="0">Error porcentual</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(844.45 562.11)"><tspan x="0" y="0">% relativo</tspan></text>
+    </g>
+  </g>
+  <rect class="st8" x="874.22" y="433.56" width="120" height="64" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st44" transform="translate(885.02 452.56)"><tspan x="0" y="0">Feature ranking</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(895.86 471.56)"><tspan x="0" y="0">Importance by</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st34" transform="translate(881.84 486.75)"><tspan x="0" y="0">variable (RF/XGB)</tspan></text>
+    </g>
+  </g>
+  <rect class="st4" x="608.41" y="602.62" width="394.06" height="44" rx="8" ry="8"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st40" transform="translate(625.88 620.16)"><tspan x="0" y="0">Final comparison table — models × feature sets</tspan></text>
+    </g>
+  </g>
+  <g class="st29">
+    <g class="st29">
+      <text class="st28" transform="translate(613.87 636.43)"><tspan x="0" y="0">Best model per target and per scenario · learning curves · residual plots</tspan></text>
+    </g>
+  </g>
+  <line class="st62" x1="805.62" y1="306.54" x2="805.62" y2="323.36"/>
+  <polygon class="st65" points="800.64 321.9 805.62 330.54 810.61 321.9 800.64 321.9"/>
+  <line class="st62" x1="805.61" y1="374.88" x2="805.61" y2="390.9"/>
+  <polygon class="st65" points="800.63 389.45 805.61 398.08 810.61 389.45 800.63 389.45"/>
+  <line class="st59" x1="807.39" y1="579.72" x2="807.39" y2="595.26"/>
+  <polygon class="st65" points="802.41 593.99 807.39 602.62 812.38 593.99 802.41 593.99"/>
+  <rect class="st46" x="574.71" y="55.55" width="461.83" height="628.51" rx="20" ry="20"/>
+  <rect class="st56" x="612.61" y="397.68" width="389.86" height="182.04"/>
+  <rect class="st56" x="581.44" y="85.71" width="448.39" height="152.9"/>
+  <g class="st29">
+    <g class="st29">
+      <text class="st18" transform="translate(592.09 101.63)"><tspan x="0" y="0">Supervised regression models</tspan></text>
+    </g>
+  </g>
+  <line class="st62" x1="805.63" y1="238.6" x2="805.63" y2="255.42"/>
+  <polygon class="st65" points="800.64 253.96 805.63 262.6 810.61 253.96 800.64 253.96"/>
+  <g>
+    <line class="st61" x1="1036.54" y1="373.67" x2="1046.64" y2="373.67"/>
+    <polygon class="st65" points="1044.45 381.15 1057.4 373.67 1044.45 366.19 1044.45 381.15"/>
+  </g>
+</svg>
