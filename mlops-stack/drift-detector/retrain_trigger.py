@@ -3,32 +3,37 @@ retrain_trigger.py  ─  Champion/Challenger para modelos HRI de regresión.
 
 Cuando el detector detecta drift, este módulo:
   1. Loguea el evento en MLflow.
-  2. Entrena un challenger con GradientBoosting para los 8 slots.
-  3. Por cada slot, compara el R² del challenger vs el champion.
-  4. Promueve el challenger si mejora el R².
-  5. Recarga la inference-api vía POST /reload.
+  2. Entrena un challenger con GradientBoosting para cada slot.
+  3. Evalúa champion y challenger sobre EL MISMO hold-out (el split de
+     train.py, random_state=42) — comparar R² medidos en particiones distintas
+     de ~28 filas es comparar ruido.
+  4. Promueve el challenger solo si pasa los quality gates del config y
+     mejora estrictamente el R² del champion.
+  5. Recarga la inference-api vía POST /reload si hubo alguna promoción.
 """
 
-import os, time, logging, traceback
+import os, time, json, logging, traceback
 import numpy as np
 import mlflow
 import mlflow.sklearn
 from mlflow import MlflowClient
 from mlflow.models import infer_signature
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.inspection import permutation_importance
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 from mlops_common import load_config
 from mlops_common.data_sources import get_data_source
+from mlops_common.problem_types import get_problem_type
 
 log = logging.getLogger(__name__)
 
 INFERENCE_URL = os.environ.get("INFERENCE_API_URL", "http://inference-api:8000")
-MIN_DELTA     = float(os.environ.get("CHALLENGER_MIN_IMPROVEMENT", "0.0"))
 API_KEY       = os.environ.get("API_KEY", "")
+# Same split as model-trainer/train.py and tests/test_model.py.
+SPLIT_SEED    = 42
 
 CHALLENGER_PARAMS = {
     "n_estimators": 200, "max_depth": 4,
@@ -38,31 +43,43 @@ CHALLENGER_PARAMS = {
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _champion_r2(client: MlflowClient, model_name: str) -> float | None:
+def _min_delta(cfg) -> float:
+    env = os.environ.get("CHALLENGER_MIN_IMPROVEMENT")
+    if env is not None:
+        return float(env)
+    return float(getattr(cfg.retrain, "challenger_min_improvement", 0.0))
+
+
+def _champion_metrics(problem, model_name: str, X_te, y_te) -> dict | None:
+    """Metrics of the current Production model on the shared hold-out."""
     try:
-        versions = client.get_latest_versions(model_name, stages=["Production"])
-        if not versions:
-            return None
-        run = client.get_run(versions[0].run_id)
-        return float(run.data.metrics.get("ho_r2", 0.0))
-    except Exception:
+        champion = mlflow.sklearn.load_model(f"models:/{model_name}/Production")
+    except Exception as e:
+        log.info(f"{model_name}: no loadable champion ({type(e).__name__})")
         return None
+    return problem.compute_metrics(y_te, champion.predict(X_te))
 
 
-def _challenger_r2(client: MlflowClient, model_name: str) -> tuple:
-    """Returns (version_str, r2) for newest undeployed version."""
-    try:
-        versions   = client.search_model_versions(f"name='{model_name}'")
-        candidates = [v for v in versions if v.current_stage == "None"]
-        if not candidates:
-            return None, None
-        newest = sorted(candidates, key=lambda v: int(v.version))[-1]
-        run    = client.get_run(newest.run_id)
-        r2     = float(run.data.metrics.get("ho_r2", 0.0))
-        return newest.version, r2
-    except Exception:
-        log.error(traceback.format_exc())
-        return None, None
+def _feature_ranking(pipeline, X_te, y_te, feature_names: list) -> dict:
+    """Permutation importance — same artifact layout as train.py."""
+    result = permutation_importance(pipeline, X_te, y_te,
+                                    n_repeats=10, random_state=42, scoring="r2")
+    ranks  = np.argsort(np.argsort(-result.importances_mean)) + 1
+    return {
+        name: {
+            "importance_mean": round(float(result.importances_mean[i]), 6),
+            "importance_std":  round(float(result.importances_std[i]),  6),
+            "rank":            int(ranks[i]),
+        }
+        for i, name in enumerate(feature_names)
+    }
+
+
+def _version_for_run(client: MlflowClient, model_name: str, run_id: str) -> str | None:
+    for v in client.search_model_versions(f"name='{model_name}'"):
+        if v.run_id == run_id:
+            return v.version
+    return None
 
 
 def _reload_api():
@@ -81,62 +98,63 @@ def _reload_api():
         log.warning(f"Could not reload API: {e}")
 
 
-def _train_challengers(mlflow_uri: str, cfg) -> bool:
-    """Trains a GradientBoosting challenger for every scenario × target slot."""
-    ms = cfg.multi_slot
-    mlflow.set_tracking_uri(mlflow_uri)
-    mlflow.set_experiment(cfg.mlflow.experiment_name)
+def _train_challenger(cfg, problem, df_sc, scenario_label: str,
+                      target_alias: str, target_col: str) -> dict:
+    """
+    Trains and registers a challenger for one slot. Returns
+    {"model_name", "run_id", "metrics", "champion_metrics"}.
+    """
+    ms         = cfg.multi_slot
+    model_name = f"hri-{scenario_label}-{target_alias}"
+    X          = df_sc[ms.feature_names].values
+    y          = df_sc[target_col].values
+    X_tr, X_te, y_tr, y_te = train_test_split(
+        X, y, test_size=cfg.training.test_size, random_state=SPLIT_SEED,
+    )
 
-    bundle = get_data_source(cfg.data_source).load()
-    df     = bundle.extra["df"]
+    champion_metrics = _champion_metrics(problem, model_name, X_te, y_te)
 
-    for scenario_id, scenario_label in ms.scenarios.items():
-        df_sc = df[df["Scenario"] == scenario_id].copy()
-        X     = df_sc[ms.feature_names].values
+    pipe = Pipeline([
+        ("scaler", StandardScaler()),
+        ("model",  GradientBoostingRegressor(**CHALLENGER_PARAMS)),
+    ])
+    pipe.fit(X_tr, y_tr)
+    ho      = problem.compute_metrics(y_te, pipe.predict(X_te))
+    metrics = {f"ho_{k}": v for k, v in ho.items()}
+    log.info(f"Challenger {scenario_label}-{target_alias}: R²={ho['r2']:.4f}")
 
-        for target_alias, target_col in ms.targets.items():
-            y          = df_sc[target_col].values
-            model_name = f"hri-{scenario_label}-{target_alias}"
-            X_tr, X_te, y_tr, y_te = train_test_split(
-                X, y, test_size=cfg.training.test_size,
-                random_state=int(time.time()) % 9999,
-            )
+    with mlflow.start_run(
+        run_name=f"{scenario_label}-{target_alias}-challenger",
+        tags={"phase": "challenger", "triggered_by": "drift_detector",
+              "config": cfg.name},
+    ) as run:
+        mlflow.log_params({
+            **CHALLENGER_PARAMS,
+            "algorithm":  "GradientBoosting",
+            "scenario":   scenario_label,
+            "target":     target_alias,
+            "n_train":    len(X_tr),
+            "n_test":     len(X_te),
+        })
+        mlflow.set_tag("problem_type", cfg.problem_type)
+        mlflow.set_tag("feature_names", json.dumps(ms.feature_names))
+        mlflow.log_metrics(metrics)
+        mlflow.log_dict(
+            _feature_ranking(pipe, X_te, y_te, ms.feature_names),
+            "feature_ranking.json",
+        )
+        sig = infer_signature(X_tr, pipe.predict(X_tr))
+        mlflow.sklearn.log_model(
+            sk_model=pipe,
+            artifact_path="model",
+            registered_model_name=model_name,
+            signature=sig,
+            input_example=X_te[:3],
+        )
+        run_id = run.info.run_id
 
-            pipe = Pipeline([
-                ("scaler", StandardScaler()),
-                ("model",  GradientBoostingRegressor(**CHALLENGER_PARAMS)),
-            ])
-            pipe.fit(X_tr, y_tr)
-            y_pred = pipe.predict(X_te)
-
-            metrics = {
-                "ho_r2":   float(r2_score(y_te, y_pred)),
-                "ho_rmse": float(np.sqrt(mean_squared_error(y_te, y_pred))),
-                "ho_mae":  float(mean_absolute_error(y_te, y_pred)),
-            }
-            log.info(f"Challenger {scenario_label}-{target_alias}: "
-                     f"R²={metrics['ho_r2']:.4f}")
-
-            with mlflow.start_run(
-                run_name=f"{scenario_label}-{target_alias}-challenger",
-                tags={"phase": "challenger", "triggered_by": "drift_detector",
-                      "config": cfg.name},
-            ):
-                mlflow.log_params({
-                    **CHALLENGER_PARAMS,
-                    "algorithm":  "GradientBoosting",
-                    "scenario":   scenario_label,
-                    "target":     target_alias,
-                })
-                mlflow.log_metrics(metrics)
-                sig = infer_signature(X_tr, pipe.predict(X_tr))
-                mlflow.sklearn.log_model(
-                    sk_model=pipe,
-                    artifact_path="model",
-                    registered_model_name=model_name,
-                    signature=sig,
-                )
-    return True
+    return {"model_name": model_name, "run_id": run_id,
+            "metrics": ho, "champion_metrics": champion_metrics}
 
 
 # ── main entry point ──────────────────────────────────────────────────────────
@@ -144,13 +162,18 @@ def _train_challengers(mlflow_uri: str, cfg) -> bool:
 def trigger(reason: str, consecutive_windows: int, mlflow_uri: str):
     cfg = load_config()
     ms  = cfg.multi_slot
+    if ms is None:
+        log.warning(f"Retrain trigger ignored: config '{cfg.name}' is not multi-slot")
+        return
 
     log.info("━" * 55)
     log.info(f"  RETRAIN TRIGGER  reason={reason}  consec={consecutive_windows}")
     log.info("━" * 55)
 
     mlflow.set_tracking_uri(mlflow_uri)
-    client = MlflowClient(mlflow_uri)
+    client    = MlflowClient(mlflow_uri)
+    problem   = get_problem_type(cfg.problem_type)
+    min_delta = _min_delta(cfg)
 
     # 1. Log trigger event
     mlflow.set_experiment("retraining-events")
@@ -159,37 +182,52 @@ def trigger(reason: str, consecutive_windows: int, mlflow_uri: str):
         mlflow.set_tag("event_type", "retrain_trigger")
     log.info("Trigger event logged ✓")
 
-    # 2. Train challengers for all 8 slots
-    try:
-        _train_challengers(mlflow_uri, cfg)
-    except Exception:
-        log.error(f"Challenger training failed:\n{traceback.format_exc()}")
-        return
+    df       = get_data_source(cfg.data_source).load().extra["df"]
+    promoted = 0
 
-    time.sleep(3)  # allow Registry to settle
-
-    # 3. Compare and promote per slot
+    # 2. Per slot: train challenger, compare on the shared hold-out, decide
     for scenario_id, scenario_label in ms.scenarios.items():
-        for target_alias in ms.targets:
-            model_name        = f"hri-{scenario_label}-{target_alias}"
-            champ_r2          = _champion_r2(client, model_name)
-            chal_ver, chal_r2 = _challenger_r2(client, model_name)
+        df_sc = df[df["Scenario"] == scenario_id].copy()
 
-            if chal_ver is None:
-                log.error(f"No challenger found for {model_name}")
+        for target_alias, target_col in ms.targets.items():
+            mlflow.set_experiment(cfg.mlflow.experiment_name)
+            try:
+                res = _train_challenger(cfg, problem, df_sc,
+                                        scenario_label, target_alias, target_col)
+            except Exception:
+                log.error(f"Challenger training failed for {scenario_label}-{target_alias}:\n"
+                          f"{traceback.format_exc()}")
                 continue
 
-            log.info(f"{model_name}: champion R²={champ_r2}  challenger v{chal_ver} R²={chal_r2:.4f}")
+            model_name = res["model_name"]
+            chal       = res["metrics"]
+            champ      = res["champion_metrics"]
+            chal_ver   = _version_for_run(client, model_name, res["run_id"])
+            if chal_ver is None:
+                log.error(f"No registered version found for challenger of {model_name}")
+                continue
 
-            promote = (champ_r2 is None) or (chal_r2 is not None and
-                                              chal_r2 >= (champ_r2 or 0.0) + MIN_DELTA)
+            gate_ok, failures = problem.quality_gate(chal, cfg.quality_gates)
+            champ_r2 = champ["r2"] if champ else None
+            # Strictly better: the challenger is deterministic, so a tie means
+            # "same model again" and must not churn Production.
+            improves = champ_r2 is None or chal["r2"] > champ_r2 + min_delta
+            promote  = gate_ok and improves
+
+            log.info(f"{model_name}: champion R²={champ_r2}  challenger v{chal_ver} "
+                     f"R²={chal['r2']:.4f}  gate_ok={gate_ok}  improves={improves}")
+            if not gate_ok:
+                log.warning(f"  Challenger fails quality gate: {failures}")
 
             mlflow.set_experiment("retraining-events")
             with mlflow.start_run(run_name=f"promotion-{model_name}-v{chal_ver}"):
-                mlflow.log_params({"model": model_name, "challenger_version": chal_ver})
-                mlflow.log_metric("challenger_r2", chal_r2 or 0.0)
-                mlflow.log_metric("champion_r2",   champ_r2 or 0.0)
+                mlflow.log_params({"model": model_name, "challenger_version": chal_ver,
+                                   "reason": reason})
+                mlflow.log_metric("challenger_r2", chal["r2"])
+                mlflow.log_metric("champion_r2",   champ_r2 if champ_r2 is not None else 0.0)
+                mlflow.log_metric("gate_passed",   int(gate_ok))
                 mlflow.log_metric("promoted",      int(promote))
+                mlflow.set_tag("event_type", "promotion_decision")
 
             if promote:
                 log.info(f"✅  Promoting {model_name} v{chal_ver} → Production")
@@ -197,11 +235,13 @@ def trigger(reason: str, consecutive_windows: int, mlflow_uri: str):
                     name=model_name, version=chal_ver,
                     stage="Production", archive_existing_versions=True,
                 )
+                promoted += 1
             else:
-                log.info(f"⏭   {model_name} challenger does not improve — archiving")
+                log.info(f"⏭   {model_name} challenger not promoted — archiving")
                 client.transition_model_version_stage(
                     name=model_name, version=chal_ver, stage="Archived",
                 )
 
-    _reload_api()
-    log.info("Retrain trigger complete ✓")
+    if promoted:
+        _reload_api()
+    log.info(f"Retrain trigger complete ✓  ({promoted} slot(s) promoted)")

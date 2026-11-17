@@ -127,6 +127,11 @@ services:
       PERF_DRIFT_EFFECT_SIZE:            "0.05"
       PERF_DRIFT_P_VALUE:                "0.05"
       PERF_DRIFT_CONSECUTIVE:            "2"
+      # Demo: inyecta drift sintético desde el ciclo 3. Apagado por defecto —
+      # un stack permanente no debe fabricar su propio drift.
+      SIMULATE_DRIFT:                    ${SIMULATE_DRIFT:-false}
+      # Tiempo mínimo entre dos reentrenamientos automáticos (segundos)
+      RETRAIN_COOLDOWN_S:                ${RETRAIN_COOLDOWN_S:-3600}
       API_KEY:                           ${API_KEY:-}
       PROMETHEUS_DISABLE_CREATED_SERIES: "true"
     volumes:
