@@ -165,9 +165,9 @@ All pipelines include `StandardScaler` — required for SVR and MLP. XGBoost/Lig
 Two API surfaces on the same FastAPI app (version 3.0.0):
 
 **HRI-specific (backward compat):**
-- `GET /health` — `models_loaded` (should be 8); `"degraded"` if < 8.
+- `GET /health` — `models_loaded` (should be 8); `"degraded"` **with HTTP 503** if < 8, so healthchecks and `curl -f` gates fail on a stack with missing models.
 - `GET /info` — scenarios, targets, features, activities.
-- `POST /predict` — takes `{scenario, workers, crop_row, rand_pos, activity}`, encodes activity to one-hot, returns all 4 targets.
+- `POST /predict` — takes `{scenario, workers, crop_row, rand_pos, activity}`, encodes activity to one-hot, returns all 4 targets. Returns 503 if any of the 4 models for that scenario is not loaded (never a placeholder value).
 - `POST /reload` — hot-reloads the 8 HRI models + clears generic model cache.
 
 **Generic (Gap 1 + Gap 2 — multi-experiment):**
@@ -181,11 +181,15 @@ The generic endpoints enable multi-experiment: run model-trainer with a differen
 
 Runs an infinite loop every `CHECK_INTERVAL_S=30` seconds:
 
-- **Data drift**: KS test (`scipy.stats.ks_2samp`) on each of the 6 features vs. training distribution.
-- **Concept drift**: KS test on live prediction distribution vs. reference prediction distribution.
-- **Performance drift**: `PerformanceDriftDetector` on R²/RMSE/MAE/sMAPE/Max Error using 3 statistical tests (effect size, t-test, EWMA).
+- **Data drift**: KS test (`scipy.stats.ks_2samp`) on each of the 6 features vs. training distribution, Bonferroni-corrected (`KS_P_VALUE_THRESHOLD / 6` per feature).
+- **Concept drift**: KS test on live prediction distribution vs. reference prediction distribution (both sampled across the two scenarios).
+- **Performance drift**: `PerformanceDriftDetector` on R²/RMSE/MAE/sMAPE/Max Error using 3 statistical tests (effect size, t-test, EWMA). Scores real API predictions against the ground truth of the sampled rows. Degradation is one-sided and scale-free: absolute drop for R², relative increase for the error metrics.
 
-After `CONSECUTIVE_DRIFT_WINDOWS=2` consecutive windows with drift, calls `retrain_trigger.trigger()`. Logs all metrics to MLflow experiments `drift-monitoring` and `performance-drift-monitoring`.
+After `CONSECUTIVE_DRIFT_WINDOWS=2` consecutive windows with drift (a clean window resets the count), calls `retrain_trigger.trigger()`, at most once every `RETRAIN_COOLDOWN_S` (default 3600). After a retrain the reference predictions and the performance baseline are rebuilt. Logs all metrics to MLflow experiments `drift-monitoring` and `performance-drift-monitoring`.
+
+Synthetic drift injection (from cycle 3) is a demo aid and is **off by default** — set `SIMULATE_DRIFT=true` in `.env` (and a short `RETRAIN_COOLDOWN_S`) to see the detection → retrain loop.
+
+`retrain_trigger.py` (champion/challenger): trains a GradientBoosting challenger per slot, scores champion and challenger on the **same** hold-out (the `random_state=42` split used by `train.py` and `test_model.py`), and promotes only if the challenger passes the config quality gates **and** strictly improves R². Challenger runs log the same metrics and `feature_ranking.json` artifact as `train.py` winners.
 
 `PerformanceDriftDetector` (in `drift-detector/performance_drift_detector.py`) is the canonical version — **also duplicated** to `tests/performance_drift_detector.py` (both must stay in sync).
 
@@ -214,14 +218,14 @@ Orchestrated by `run_tests.py` (6 levels run in sequence — every level is a ha
 | 5 | `test_model_slices.py` | Per-slice R² ≥ 0.50 on every activity and worker group (low/medium/high), R² gap between scenarios ≤ 0.25, monotonicity (more workers → more production). Catches sub-group bias hidden by the aggregate R² |
 | 6 | `test_api_contract.py` | Frozen JSON schema of all 6 endpoints (field names, types, required/optional) plus value-level checks — detects breaking API changes before consumers do |
 
-Levels 3, 4 and 6 skip gracefully when `inference-api` is not reachable. A summary run is logged to the `quality-assurance` MLflow experiment.
+Levels 3, 4 and 6 skip gracefully when `inference-api` is not reachable. In level 2, a slot without a loadable Production model, missing metrics or a missing `feature_ranking.json` is a **failure** (the registry tests used to turn failed assertions into skips). A summary run is logged to the `quality-assurance` MLflow experiment.
 
 #### Known findings (status 2026-07-13, latest full-suite run)
 
 Latest end-to-end run: data 28/28 ✓ · model 82/82 ✓ · api 36/37 ✗ · performance_drift 16/19 ✗ · model_slices 60/61 ✗ · api_contract 26/26 ✓. The failures are the documented open findings:
 
 1. **API**: `GET /models/{name}` returns HTTP 503 instead of 404 for nonexistent models (`test_get_nonexistent_model_404`).
-2. **Performance drift**: the detector raises false positives on stable data (`rmse`/`mae`) in 3 unit tests.
+2. **Performance drift** — *fixed 2026-11-17*: the effect-size threshold was absolute (0.05) for metrics measured in target units; it is now scale-free. Unit tests 19/19.
 3. **Slice bias**: `WithRobot-AvgProduction` fails the per-slice gate on `harv_ladder` (R² = 0.00 < 0.50, n = 36). Originally `harv_ground` (R² = 0.21) failed too; a newer champion promoted by the champion/challenger retraining loop corrected that slice — only `harv_ladder` persists.
 4. **Test harness (infra)**: `tests/entrypoint.sh` rewrites the compose-provided service-name URLs to the Docker gateway IP, which stopped working when published ports were bound to `127.0.0.1` (P0 hardening). Affects local `docker compose run test-runner` **and the CI QA step**. Workaround in Troubleshooting below; proper fix: keep the service DNS names and fall back to the gateway only when they don't resolve.
 

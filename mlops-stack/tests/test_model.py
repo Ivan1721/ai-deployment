@@ -74,10 +74,12 @@ def model_ctx(request):
 
     scenario_id, scenario_label, target_alias, target_col = request.param
     name = _model_name(scenario_label, target_alias)
+    # A slot without a loadable Production model is a failure, not a skip:
+    # the suite gates promotion on all 8 slots being served.
     try:
         model = mlflow.sklearn.load_model(f"models:/{name}/{MODEL_STAGE}")
     except Exception as e:
-        pytest.skip(f"Cannot load {name}: {e}")
+        pytest.fail(f"Cannot load {name} ({MODEL_STAGE}): {e}", pytrace=False)
     return model, scenario_id, scenario_label, target_alias, target_col
 
 
@@ -176,70 +178,44 @@ class TestSanityChecks:
 
 # ── MLflow Registry ────────────────────────────────────────────────────────────
 
+def _production_version(model_ctx):
+    """
+    Returns (client, name, ModelVersion) for the slot's Production version.
+
+    No try/except on purpose: AssertionError is an Exception, so wrapping the
+    assertions and skipping on `except Exception` turned every failure into a
+    skip. run_tests.py already aborts when MLflow is unreachable.
+    """
+    import mlflow
+    from mlflow import MlflowClient
+    mlflow.set_tracking_uri(MLFLOW_URI)
+    client = MlflowClient(MLFLOW_URI)
+    _, _, scenario_label, target_alias, _ = model_ctx
+    name = _model_name(scenario_label, target_alias)
+    vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
+    assert len(vs) > 0, f"No versions of '{name}' in stage '{MODEL_STAGE}'"
+    return client, name, vs[0]
+
+
 class TestMLFlowRegistry:
 
     def test_model_in_registry(self, model_ctx):
-        import mlflow
-        from mlflow import MlflowClient
-        mlflow.set_tracking_uri(MLFLOW_URI)
-        client = MlflowClient(MLFLOW_URI)
-        _, _, scenario_label, target_alias, _ = model_ctx
-        name = _model_name(scenario_label, target_alias)
-        try:
-            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
-            assert len(vs) > 0, f"No versions of '{name}' in stage '{MODEL_STAGE}'"
-        except Exception as e:
-            pytest.skip(f"MLFlow not available: {e}")
+        _production_version(model_ctx)
 
     def test_all_metrics_logged(self, model_ctx):
-        import mlflow
-        from mlflow import MlflowClient
-        mlflow.set_tracking_uri(MLFLOW_URI)
-        client = MlflowClient(MLFLOW_URI)
-        _, _, scenario_label, target_alias, _ = model_ctx
-        name = _model_name(scenario_label, target_alias)
-        try:
-            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
-            if not vs:
-                pytest.skip("No production version found")
-            run = client.get_run(vs[0].run_id)
-            m   = run.data.metrics
-            for key in ("ho_r2", "ho_rmse", "ho_mae", "ho_smape", "ho_max_error"):
-                assert key in m, f"Metric '{key}' not logged for {name}"
-        except Exception as e:
-            pytest.skip(f"MLFlow not available: {e}")
+        client, name, version = _production_version(model_ctx)
+        m = client.get_run(version.run_id).data.metrics
+        for key in ("ho_r2", "ho_rmse", "ho_mae", "ho_smape", "ho_max_error"):
+            assert key in m, f"Metric '{key}' not logged for {name}"
 
     def test_feature_ranking_artifact(self, model_ctx):
-        import mlflow
-        from mlflow import MlflowClient
-        mlflow.set_tracking_uri(MLFLOW_URI)
-        client = MlflowClient(MLFLOW_URI)
-        _, _, scenario_label, target_alias, _ = model_ctx
-        name = _model_name(scenario_label, target_alias)
-        try:
-            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
-            if not vs:
-                pytest.skip("No production version found")
-            artifacts = [a.path for a in client.list_artifacts(vs[0].run_id)]
-            assert "feature_ranking.json" in artifacts, \
-                f"feature_ranking.json not found for {name}. Found: {artifacts}"
-        except Exception as e:
-            pytest.skip(f"MLFlow not available: {e}")
+        client, name, version = _production_version(model_ctx)
+        artifacts = [a.path for a in client.list_artifacts(version.run_id)]
+        assert "feature_ranking.json" in artifacts, \
+            f"feature_ranking.json not found for {name}. Found: {artifacts}"
 
     def test_r2_metric_logged(self, model_ctx):
-        import mlflow
-        from mlflow import MlflowClient
-        mlflow.set_tracking_uri(MLFLOW_URI)
-        client = MlflowClient(MLFLOW_URI)
-        _, _, scenario_label, target_alias, _ = model_ctx
-        name = _model_name(scenario_label, target_alias)
-        try:
-            vs = client.get_latest_versions(name, stages=[MODEL_STAGE])
-            if not vs:
-                pytest.skip("No production version found")
-            run = client.get_run(vs[0].run_id)
-            ho_r2 = run.data.metrics.get("ho_r2")
-            assert ho_r2 is not None, "Metric 'ho_r2' not found in MLflow run"
-            assert ho_r2 >= MIN_R2, f"Logged ho_r2={ho_r2:.4f} < {MIN_R2}"
-        except Exception as e:
-            pytest.skip(f"MLFlow not available: {e}")
+        client, name, version = _production_version(model_ctx)
+        ho_r2 = client.get_run(version.run_id).data.metrics.get("ho_r2")
+        assert ho_r2 is not None, f"Metric 'ho_r2' not found in MLflow run for {name}"
+        assert ho_r2 >= MIN_R2, f"{name}: logged ho_r2={ho_r2:.4f} < {MIN_R2}"

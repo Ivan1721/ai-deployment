@@ -53,12 +53,32 @@ class PerformanceDriftDetector:
             "max_error": float(sk_max_error(y_true, y_pred)),
         }
 
+    # Metrics where a HIGHER value is better. Everything else is an error
+    # metric (rmse, mae, smape, max_error) where higher is worse.
+    HIGHER_IS_BETTER = {"r2"}
+
+    def _degradation(self, name: str, value: float, baseline: float) -> float:
+        """
+        Scale-free degradation of `value` vs `baseline` (positive = worse).
+
+        R² is bounded, so the absolute drop is used. Error metrics live in the
+        units of the target (crop units, kcal, %), so the increase is expressed
+        relative to the baseline — a 0.05 threshold means "5% worse", not
+        "0.05 crop units worse".
+        """
+        if name in self.HIGHER_IS_BETTER:
+            return baseline - value
+        return (value - baseline) / max(abs(baseline), 1e-9)
+
     def detect_drift(self, current_metrics: Dict[str, float]) -> Tuple[bool, Dict]:
         """
-        Detect drift using three tests:
-          1. Effect size: |current - baseline| > threshold
+        Detect performance degradation using three tests:
+          1. Effect size: degradation > threshold
           2. T-test:      one-sample t-test against baseline (≥5 observations)
-          3. EWMA:        sustained deviation via exponential moving average
+          3. EWMA:        sustained degradation via exponential moving average
+
+        Degradation is scale-free (see _degradation) and one-sided: a model
+        that performs better than its baseline is not flagged.
 
         Returns (is_drift, details_dict). Drift requires ≥2 metrics flagged.
         """
@@ -77,29 +97,30 @@ class PerformanceDriftDetector:
                 continue
 
             self.metric_history[name].append(current)
-            history    = self.metric_history[name]
-            abs_change = abs(current - baseline)
+            history     = self.metric_history[name]
+            degradation = self._degradation(name, current, baseline)
 
             result = {
-                "current":    current,
-                "baseline":   baseline,
-                "change_pct": round(100 * (current - baseline) / (abs(baseline) + 1e-9), 2),
-                "drift":      False,
-                "reason":     None,
+                "current":     current,
+                "baseline":    baseline,
+                "change_pct":  round(100 * (current - baseline) / (abs(baseline) + 1e-9), 2),
+                "degradation": round(degradation, 4),
+                "drift":       False,
+                "reason":      None,
             }
 
             # 1. Effect size
-            if abs_change > self.effect_size_threshold:
+            if degradation > self.effect_size_threshold:
                 result["drift"]  = True
-                result["reason"] = f"effect_size={abs_change:.4f} > {self.effect_size_threshold}"
+                result["reason"] = f"effect_size={degradation:.4f} > {self.effect_size_threshold}"
                 drifted_count   += 1
 
             # 2. T-test (min 5 observations)
             if len(history) >= 5 and not result["drift"]:
                 t_stat, p_val = stats.ttest_1samp(history[-5:], baseline)
-                result["t_stat"]  = round(t_stat, 4)
-                result["p_value"] = round(p_val, 4)
-                if p_val < self.p_value_threshold and abs_change > 0.02:
+                result["t_stat"]  = round(float(t_stat), 4)
+                result["p_value"] = round(float(p_val), 4)
+                if p_val < self.p_value_threshold and degradation > 0.02:
                     result["drift"]  = True
                     result["reason"] = f"t-test p={p_val:.4f} < {self.p_value_threshold}"
                     drifted_count   += 1
@@ -109,11 +130,11 @@ class PerformanceDriftDetector:
                 self.ewma_alpha * current
                 + (1 - self.ewma_alpha) * self.ewma_values[name]
             )
-            ewma_change = abs(self.ewma_values[name] - baseline)
+            ewma_degradation = self._degradation(name, self.ewma_values[name], baseline)
             result["ewma"] = round(self.ewma_values[name], 4)
-            if ewma_change > 0.07 and not result["drift"]:
+            if ewma_degradation > 0.07 and not result["drift"]:
                 result["drift"]  = True
-                result["reason"] = f"EWMA divergence={ewma_change:.4f}"
+                result["reason"] = f"EWMA degradation={ewma_degradation:.4f}"
                 drifted_count   += 1
 
             details["tests"][name] = result
@@ -158,6 +179,9 @@ class PerformanceDriftMonitor:
     def add_batch(self, y_pred: np.ndarray, y_true: np.ndarray):
         self.predictions_buffer.extend(np.asarray(y_pred, dtype=float))
         self.labels_buffer.extend(np.asarray(y_true, dtype=float))
+        # Only the last window is ever scored — do not grow without bound.
+        del self.predictions_buffer[:-self.window_size]
+        del self.labels_buffer[:-self.window_size]
 
     def check_drift(self) -> Tuple[bool, list]:
         if len(self.predictions_buffer) < self.window_size:

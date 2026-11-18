@@ -50,6 +50,17 @@ PERF_DRIFT_THR     = float(os.environ.get("PERF_DRIFT_EFFECT_SIZE", "0.05"))
 PERF_DRIFT_P_VALUE = float(os.environ.get("PERF_DRIFT_P_VALUE",     "0.05"))
 PERF_CONSEC_NEED   = int(os.environ.get("PERF_DRIFT_CONSECUTIVE",   "2"))
 
+# Synthetic drift injection is a demo aid and is OFF unless explicitly enabled:
+# a long-running stack must not manufacture its own drift (and retrains).
+SIMULATE_DRIFT     = os.environ.get("SIMULATE_DRIFT", "false").lower() == "true"
+MAX_DRIFT_MAG      = float(os.environ.get("SIMULATE_DRIFT_MAX_MAG", "3.0"))
+# Minimum time between two retrains, whatever the reason.
+RETRAIN_COOLDOWN_S = int(os.environ.get("RETRAIN_COOLDOWN_S", "3600"))
+REF_PRED_SAMPLES   = int(os.environ.get("REFERENCE_PREDICTION_SAMPLES", "100"))
+PERF_TARGET_COL    = "TotalRecollectedCrops_crop_units"
+
+_last_retrain_ts = 0.0
+
 # Load experiment configuration from MODEL_CONFIG YAML
 _cfg = load_config()
 _ms  = _cfg.multi_slot
@@ -159,12 +170,14 @@ def build_reference(df: pd.DataFrame) -> dict:
     """
     ref = {feat: df[feat].values for feat in FEATURE_NAMES}
 
-    # Build reference prediction distribution (TotalRecollected, scenario 0)
+    # Reference prediction distribution (TotalRecollected). Sampled across ALL
+    # scenarios, exactly like ProductionBuffer does — a scenario-0-only
+    # reference compared against mixed-scenario windows reads as concept drift.
     ref_preds = []
-    sample = df[df["Scenario"] == 0].sample(min(WIN_SIZE, len(df)), replace=False)
+    sample = df.sample(min(REF_PRED_SAMPLES, len(df)), replace=False)
     for _, row in sample.iterrows():
         resp = _predict_api(
-            scenario=0,
+            scenario=int(row["Scenario"]),
             workers=int(row["Humans"]),
             crop_row=int(row["ROW_N"]),
             rand_pos=int(row["RandomPosition"]),
@@ -205,7 +218,8 @@ def build_baseline_metrics(df: pd.DataFrame) -> dict:
 class ProductionBuffer:
     """
     Simulates a production data window by sampling from the training dataset.
-    In later cycles (cycle >= 3), injects synthetic drift to test detection.
+    With SIMULATE_DRIFT=true, injects synthetic drift from cycle 3 onwards
+    (bounded by SIMULATE_DRIFT_MAX_MAG) to demo detection.
     Calls the inference API for real predictions; falls back to dataset values.
     """
 
@@ -224,8 +238,8 @@ class ProductionBuffer:
             feat = row[FEATURE_NAMES].values.astype(float).copy()
 
             # Inject drift: shift Humans and ROW_N in later cycles
-            if self.cycle >= 3:
-                mag      = (self.cycle - 2) * 0.5
+            if SIMULATE_DRIFT and self.cycle >= 3:
+                mag      = min((self.cycle - 2) * 0.5, MAX_DRIFT_MAG)
                 feat[0]  = float(np.clip(feat[0] + np.random.randn() * mag, 1, 12))
                 feat[1]  = float(np.clip(feat[1] + np.random.randn() * 0.3, 1, 3))
 
@@ -254,10 +268,33 @@ class ProductionBuffer:
         return sample[target_col].values
 
 
+# ── retraining ────────────────────────────────────────────────────────────────
+
+def _retrain(reason: str, consec: int) -> bool:
+    """
+    Runs champion/challenger retraining unless one ran less than
+    RETRAIN_COOLDOWN_S ago. Returns True only if retraining actually ran.
+    """
+    global _last_retrain_ts
+    remaining = RETRAIN_COOLDOWN_S - (time.time() - _last_retrain_ts)
+    if _last_retrain_ts and remaining > 0:
+        log.warning(f"  Retrain ({reason}) suppressed — cooldown, {remaining:.0f}s remaining")
+        return False
+
+    log.warning(f"  RETRAINING TRIGGERED  reason={reason}  consecutive={consec}")
+    _last_retrain_ts = time.time()
+    retrain_trigger.trigger(
+        reason=reason, consecutive_windows=consec, mlflow_uri=MLFLOW_URI,
+    )
+    RETRAIN_TRIGGERED.labels(reason=reason).inc()
+    return True
+
+
 # ── drift cycles ──────────────────────────────────────────────────────────────
 
-def run_cycle(cycle: int, ref: dict, df: pd.DataFrame, consec: int) -> int:
-    log.info(f"--- Cycle {cycle}  (drift_phase={cycle >= 3}) ---")
+def run_cycle(cycle: int, ref: dict, df: pd.DataFrame, consec: int) -> tuple:
+    """Returns (consecutive_drift_windows, retrained)."""
+    log.info(f"--- Cycle {cycle}  (simulated_drift={SIMULATE_DRIFT and cycle >= 3}) ---")
 
     buf = ProductionBuffer(df, cycle)
     buf.fill()
@@ -265,16 +302,19 @@ def run_cycle(cycle: int, ref: dict, df: pd.DataFrame, consec: int) -> int:
     preds   = buf.predictions()
 
     # ── Data drift: KS per feature ────────────────────────────────────────────
+    # Bonferroni: one test per feature, so each one is held to KS_THR / n —
+    # otherwise the chance of a false alarm per window grows with n.
+    feat_thr      = KS_THR / len(FEATURE_NAMES)
     data_drifted  = False
     drifted_feats = []
     for feat in FEATURE_NAMES:
         stat, pval = stats.ks_2samp(ref[feat], feat_df[feat].values)
         KS_PVAL.labels(feature=feat).set(pval)
-        if pval < KS_THR:
+        if pval < feat_thr:
             data_drifted = True
             drifted_feats.append(feat)
         log.info(f"  KS [{feat:18s}]: stat={stat:.4f}  pval={pval:.4f}  "
-                 f"drift={'YES' if pval < KS_THR else 'no'}")
+                 f"drift={'YES' if pval < feat_thr else 'no'}")
 
     # ── Concept drift: KS on predictions ─────────────────────────────────────
     concept_drifted = False
@@ -320,50 +360,72 @@ def run_cycle(cycle: int, ref: dict, df: pd.DataFrame, consec: int) -> int:
         log.error(f"  MLflow logging failed:\n{traceback.format_exc()}")
 
     # ── Trigger retrain ───────────────────────────────────────────────────────
+    retrained = False
     if consec >= CONSEC_NEED:
-        log.warning(f"  RETRAINING TRIGGERED (consecutive={consec})")
         reason = "data_drift" if data_drifted else "concept_drift"
         try:
-            retrain_trigger.trigger(
-                reason=reason,
-                consecutive_windows=consec,
-                mlflow_uri=MLFLOW_URI,
-            )
-            RETRAIN_TRIGGERED.labels(reason=reason).inc()
-            consec = 0
+            retrained = _retrain(reason, consec)
+            if retrained:
+                consec = 0
         except Exception:
             log.error(f"  Retrain failed:\n{traceback.format_exc()}")
 
-    return consec
+    return consec, retrained
 
 
 def run_performance_drift_cycle(
     cycle: int,
     perf_monitor: PerformanceDriftMonitor,
     df: pd.DataFrame,
-) -> int:
+) -> bool:
+    """
+    Scores the served model on a labelled window: real predictions from the
+    inference API against the ground truth of the sampled rows.
+    Returns True if performance drift was detected in this window.
+    """
     if not ENABLE_PERF_DRIFT:
-        return 0
+        return False
 
     log.info(f"--- Performance Drift Cycle {cycle} ---")
     try:
-        df_sc  = df[df["Scenario"] == 0].sample(min(WIN_SIZE, len(df)), replace=True)
-        y_true = df_sc["TotalRecollectedCrops_crop_units"].values.astype(float)
+        df_sc = df[df["Scenario"] == 0].sample(WIN_SIZE, replace=True)
+        y_true, y_pred = [], []
+        for _, row in df_sc.iterrows():
+            resp = _predict_api(
+                scenario=0,
+                workers=int(row["Humans"]),
+                crop_row=int(row["ROW_N"]),
+                rand_pos=int(row["RandomPosition"]),
+                activity=_activity_from_row(row),
+            )
+            if resp is None or "total_recollected" not in resp:
+                continue
+            y_true.append(float(row[PERF_TARGET_COL]))
+            y_pred.append(float(resp["total_recollected"]))
 
-        # Simulate predictions: stable early, degraded later
-        if cycle < 3:
-            y_pred = y_true + np.random.randn(len(y_true)) * 5.0
-        else:
-            bias   = (cycle - 2) * 10.0
-            y_pred = y_true * 0.75 + np.random.randn(len(y_true)) * 20.0 + bias
+        if len(y_pred) < WIN_SIZE:
+            log.warning(f"  Only {len(y_pred)}/{WIN_SIZE} predictions from the API — "
+                        f"skipping performance check")
+            return False
+
+        y_true = np.array(y_true)
+        y_pred = np.array(y_pred)
+
+        # Demo only: degrade the predictions to exercise the detector.
+        if SIMULATE_DRIFT and cycle >= 3:
+            bias   = min((cycle - 2) * 10.0, MAX_DRIFT_MAG * 20.0)
+            y_pred = y_pred * 0.75 + np.random.randn(len(y_pred)) * 20.0 + bias
 
         perf_monitor.add_batch(y_pred, y_true)
         drift, results = perf_monitor.check_drift()
 
         if results:
             metrics = results[0].get("metrics", {})
-            log.info(f"  Perf drift={drift}  R²={metrics.get('r2', 'N/A'):.4f}  "
-                     f"RMSE={metrics.get('rmse', 'N/A'):.2f}")
+            log.info(f"  Perf drift={drift}  R²={metrics.get('r2', float('nan')):.4f}  "
+                     f"RMSE={metrics.get('rmse', float('nan')):.2f}  "
+                     f"drifted={results[0].get('drifted_metrics')}")
+            if drift:
+                DRIFT_DETECTED.labels(type="performance").inc()
 
             try:
                 mlflow.set_tracking_uri(MLFLOW_URI)
@@ -376,10 +438,22 @@ def run_performance_drift_cycle(
             except Exception:
                 log.warning("MLflow performance logging failed")
 
-        return int(drift)
+        return bool(drift)
     except Exception:
         log.error(f"  Perf drift error:\n{traceback.format_exc()}")
-        return 0
+        return False
+
+
+def _new_perf_monitor(df: pd.DataFrame) -> PerformanceDriftMonitor:
+    baseline_metrics = build_baseline_metrics(df)
+    log.info(f"Baseline metrics: {baseline_metrics}")
+    return PerformanceDriftMonitor(
+        baseline_metrics,
+        window_size=WIN_SIZE,
+        num_windows=3,
+        effect_size_threshold=PERF_DRIFT_THR,
+        p_value_threshold=PERF_DRIFT_P_VALUE,
+    )
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -392,21 +466,13 @@ def main():
     log.info("Prometheus metrics server started on :9091")
 
     wait_for(f"{MLFLOW_URI}/",     "MLflow")
-    wait_for(f"{INFER_URL}/health", "InferenceAPI", retries=10, delay=3)
+    wait_for(f"{INFER_URL}/health", "InferenceAPI", retries=40, delay=3)
 
-    df  = _load_preprocessed()
-    ref = build_reference(df)
+    log.info(f"  SIMULATE_DRIFT={SIMULATE_DRIFT}  RETRAIN_COOLDOWN_S={RETRAIN_COOLDOWN_S}")
 
-    baseline_metrics = build_baseline_metrics(df)
-    log.info(f"Baseline metrics: {baseline_metrics}")
-
-    perf_monitor = PerformanceDriftMonitor(
-        baseline_metrics,
-        window_size=WIN_SIZE,
-        num_windows=3,
-        effect_size_threshold=PERF_DRIFT_THR,
-        p_value_threshold=PERF_DRIFT_P_VALUE,
-    )
+    df           = _load_preprocessed()
+    ref          = build_reference(df)
+    perf_monitor = _new_perf_monitor(df)
 
     consec      = 0
     perf_consec = 0
@@ -414,21 +480,28 @@ def main():
 
     while True:
         try:
-            consec      = run_cycle(cycle, ref, df, consec)
-            perf_consec += run_performance_drift_cycle(cycle, perf_monitor, df)
-            if perf_consec >= PERF_CONSEC_NEED:
-                log.warning(f"  PERFORMANCE DRIFT RETRAINING TRIGGERED")
+            # The API may not have been serving when the reference was built.
+            if ref.get("pred_dist") is None:
+                ref = build_reference(df)
+
+            consec, retrained = run_cycle(cycle, ref, df, consec)
+
+            # Consecutive windows: a clean window resets the count.
+            perf_drift  = run_performance_drift_cycle(cycle, perf_monitor, df)
+            perf_consec = perf_consec + 1 if perf_drift else 0
+            if perf_consec >= PERF_CONSEC_NEED and not retrained:
                 try:
-                    retrain_trigger.trigger(
-                        reason="performance_drift",
-                        consecutive_windows=perf_consec,
-                        mlflow_uri=MLFLOW_URI,
-                    )
-                    RETRAIN_TRIGGERED.labels(reason="performance_drift").inc()
-                    perf_consec = 0
-                    perf_monitor.reset_buffer()
+                    if _retrain("performance_drift", perf_consec):
+                        retrained = True
                 except Exception:
                     log.error(traceback.format_exc())
+
+            # A retrain may have promoted new champions: the reference
+            # predictions and the performance baseline belong to the old ones.
+            if retrained:
+                consec, perf_consec = 0, 0
+                ref          = build_reference(df)
+                perf_monitor = _new_perf_monitor(df)
         except Exception:
             log.error(f"Unhandled error in cycle {cycle}:\n{traceback.format_exc()}")
 

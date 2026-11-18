@@ -2,6 +2,23 @@
 
 ---
 
+## Correcciones de QA, drift y serving  |  2026-11-17
+
+Verificado con un dataset sintético y un registro MLflow local (sin el stack completo ni el CSV real).
+
+| Área | Problema | Corrección |
+|---|---|---|
+| `tests/test_model.py` | Los 4 tests del registro envolvían los `assert` en `try/except Exception → pytest.skip`: un fallo se reportaba como *skipped*. Un slot sin modelo también se saltaba. | Sin `try/except`; un slot sin modelo en Production es un fallo. |
+| `performance_drift_detector.py` (ambas copias) | Umbral de effect size absoluto (0.05) aplicado a RMSE/MAE/Max Error en unidades del target → drift permanente. | Degradación sin unidades (absoluta en R², relativa en errores) y unilateral. Unit tests 19/19 (antes 16/19). El buffer del monitor ya no crece sin límite. |
+| `detector.py` | `perf_consec` acumulaba y nunca se reiniciaba; drift sintético siempre activo y creciente; referencia de concepto solo del escenario 0 contra ventanas mixtas; predicciones de rendimiento simuladas. | Contador realmente consecutivo; `SIMULATE_DRIFT` (apagado por defecto); referencia con ambos escenarios; predicciones reales de la API; Bonferroni en KS por feature; `RETRAIN_COOLDOWN_S`; referencia y baseline se reconstruyen tras un reentrenamiento. |
+| `retrain_trigger.py` | Challenger evaluado en una partición aleatoria distinta a la del champion, promovido con `>=` y sin quality gate; no logueaba `ho_smape`, `ho_max_error` ni `feature_ranking.json`. | Mismo hold-out para ambos, quality gates del config, mejora estricta, mismas métricas y artefactos que `train.py`. Solo recarga la API si hubo promoción. |
+| `inference-api/app.py` | `/predict` devolvía `0.0` para un target sin modelo; `/health` respondía 200 estando `degraded`; el arranque esperaba ~2 min por cada modelo faltante. | 503 si falta un modelo del escenario; `/health` 503 si `degraded`; un único presupuesto de reintentos para todos los slots. |
+| `mlflow/Dockerfile` | Un build nuevo instala SQLAlchemy 2.1, incompatible con MLflow 2.13 (`ImportError: FallbackAsyncAdaptedQueuePool`) → el servidor con backend PostgreSQL no arranca. | Pin `sqlalchemy<2.1`. |
+
+**Cambio de comportamiento:** el drift sintético ya no se inyecta por defecto. Para la demo, definir `SIMULATE_DRIFT=true` y un `RETRAIN_COOLDOWN_S` corto en `.env`.
+
+---
+
 ## Validación end-to-end del stack  |  2026-07-13
 
 Sesión de arranque y validación completa: 9 servicios de larga vida arriba (healthchecks en `healthy`), 8 modelos `Production` servidos, smoke tests OK (predict vía nginx+TLS+API key, `/models` genérico, SSO 302 en `/mlflow/`, Grafana 302, 2 targets `up` en Prometheus).

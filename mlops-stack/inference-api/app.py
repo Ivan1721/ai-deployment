@@ -27,6 +27,7 @@ import pandas as pd
 from mlflow.tracking import MlflowClient
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, Gauge, make_asgi_app
@@ -57,6 +58,15 @@ SCENARIOS       = _ms.scenarios       if _ms else {0: "HumanOnly", 1: "WithRobot
 TARGETS         = _ms.targets         if _ms else {}
 FEATURE_NAMES   = _ms.feature_names   if _ms else []
 ACTIVITY_VALUES = ["harv_ground", "harv_ladder", "harv_mixed", "harv_picker"]
+EXPECTED_MODELS = len(SCENARIOS) * len(TARGETS)
+
+# PredictResponse field → target alias in the config
+RESPONSE_TARGETS = {
+    "total_recollected":   "TotalRecollected",
+    "cargo_zone_prod":     "CargoZoneProd",
+    "total_workload_kcal": "TotalWorkload",
+    "avg_production":      "AvgProduction",
+}
 
 # HRI model state (8 pre-loaded models)
 state: Dict = {"models": {}, "loaded_at": None}
@@ -103,30 +113,40 @@ def _encode_activity(activity: str) -> Dict[str, int]:
 
 
 def load_all_models(retries: int = 20, delay: int = 6) -> None:
+    """
+    Loads every HRI slot from the registry.
+
+    `retries * delay` is ONE time budget shared by all slots (it covers MLflow
+    still starting up). Each slot is tried at least once; a slot that has no
+    Production version does not hold the others — or the startup — hostage.
+    """
     mlflow.set_tracking_uri(TRACKING_URI)
+    deadline = time.time() + retries * delay
     loaded: Dict = {}
     for scenario_label in SCENARIOS.values():
         loaded[scenario_label] = {}
         for target_alias in TARGETS:
             model_name = f"hri-{scenario_label}-{target_alias}"
             model_uri  = f"models:/{model_name}/{MODEL_STAGE}"
-            for attempt in range(1, retries + 1):
+            attempt    = 0
+            while True:
+                attempt += 1
                 try:
                     loaded[scenario_label][target_alias] = mlflow.sklearn.load_model(model_uri)
                     log.info(f"Loaded {model_name}")
                     break
                 except Exception as e:
-                    log.warning(f"  {model_name} attempt {attempt}/{retries}: {e}")
-                    if attempt < retries:
-                        time.sleep(delay)
-            else:
-                log.error(f"Failed to load {model_name} after {retries} attempts")
+                    log.warning(f"  {model_name} attempt {attempt}: {e}")
+                    if time.time() + delay > deadline:
+                        log.error(f"Failed to load {model_name} — giving up")
+                        break
+                    time.sleep(delay)
 
     state["models"]    = loaded
     state["loaded_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     total = sum(len(v) for v in loaded.values())
     MODELS_LOADED.set(total)
-    log.info(f"Models loaded: {total}/8")
+    log.info(f"Models loaded: {total}/{EXPECTED_MODELS}")
 
 
 @asynccontextmanager
@@ -231,12 +251,16 @@ class ModelInfo(BaseModel):
 @app.get("/health")
 def health():
     total = sum(len(v) for v in state["models"].values())
-    return {
-        "status":        "ok" if total == 8 else "degraded",
+    ok    = total == EXPECTED_MODELS
+    body  = {
+        "status":        "ok" if ok else "degraded",
         "models_loaded": total,
         "model_stage":   MODEL_STAGE,
         "loaded_at":     state["loaded_at"],
     }
+    # 503 when degraded so healthchecks, start.sh and the CD gate (curl -f)
+    # do not report a stack with missing models as healthy.
+    return body if ok else JSONResponse(status_code=503, content=body)
 
 
 @app.get("/info")
@@ -257,8 +281,12 @@ def predict(req: PredictRequest):
 
     scenario_label = SCENARIOS[req.scenario]
     models = state["models"].get(scenario_label, {})
-    if not models:
-        raise HTTPException(503, f"Models for scenario '{scenario_label}' not loaded yet.")
+    # Never answer with a made-up value: a missing slot is an outage, not 0.0.
+    missing = [alias for alias in RESPONSE_TARGETS.values() if alias not in models]
+    if missing:
+        raise HTTPException(
+            503, f"Models not loaded for scenario '{scenario_label}': {missing}"
+        )
 
     enc = _encode_activity(req.activity)
     X   = pd.DataFrame([[
@@ -266,15 +294,15 @@ def predict(req: PredictRequest):
         enc["Act_Ladder"], enc["Act_Mixed"], enc["Act_Picker"],
     ]], columns=FEATURE_NAMES).values
 
-    preds = {alias: round(float(model.predict(X)[0]), 4) for alias, model in models.items()}
+    preds = {
+        field: round(float(models[alias].predict(X)[0]), 4)
+        for field, alias in RESPONSE_TARGETS.items()
+    }
     PREDICTIONS_TOTAL.labels(scenario=scenario_label, activity=req.activity).inc()
 
     return PredictResponse(
         scenario_label=scenario_label,
-        total_recollected=preds.get("TotalRecollected", 0.0),
-        cargo_zone_prod=preds.get("CargoZoneProd", 0.0),
-        total_workload_kcal=preds.get("TotalWorkload", 0.0),
-        avg_production=preds.get("AvgProduction", 0.0),
+        **preds,
         model_stage=MODEL_STAGE,
         loaded_at=state["loaded_at"] or "",
     )

@@ -45,11 +45,19 @@ Cada ventana de tiempo (30 predicciones), se calculan las métricas actuales y s
 
 ### 3. Métodos Estadísticos
 
-#### a) Effect Size (Cambio Absoluto)
+#### a) Effect Size (Degradación, sin unidades)
 ```
-Si |actual - baseline| > 0.05 → Potencial drift
-Ejemplo: R² cae de 0.92 a 0.85 → cambio de 0.07 → DRIFT
+R²:                 baseline - actual > 0.05            (caída absoluta)
+RMSE / MAE / sMAPE
+/ Max Error:        (actual - baseline) / |baseline| > 0.05   (5 % peor)
+
+Ejemplo: R² cae de 0.92 a 0.85 → 0.07 → DRIFT
+Ejemplo: RMSE sube de 10.5 a 11.0 → 4.8 % → sin drift
 ```
+El umbral es relativo para las métricas de error porque están en las unidades
+del target (crop units, kcal): un umbral absoluto de 0.05 se superaba con
+cualquier ruido. Solo cuenta la degradación; una mejora no es drift. Los
+criterios b) y c) usan la misma medida.
 
 #### b) T-Test (Significancia)
 ```
